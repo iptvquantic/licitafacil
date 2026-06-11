@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recuperar senha — LicitaFácil</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:16px; }
+    .auth-container { width:100%; max-width:400px; display:flex; flex-direction:column; gap:20px; }
+    .auth-logo { display:flex; align-items:center; gap:10px; justify-content:center; }
+    .auth-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-xl); padding:32px; box-shadow:var(--shadow-lg); }
+    .auth-title { font-family:var(--font-h); font-size:1.4rem; font-weight:700; text-align:center; margin-bottom:6px; }
+    .auth-subtitle { text-align:center; color:var(--text2); font-size:0.875rem; margin-bottom:24px; }
+    .auth-form { display:flex; flex-direction:column; gap:16px; }
+    .auth-footer { text-align:center; font-size:0.85rem; color:var(--text2); }
+    .auth-footer a { color:var(--accent); font-weight:600; }
+    .success-box {
+      text-align:center; padding:20px;
+      background: rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2);
+      border-radius:var(--r-lg);
+    }
+    .success-icon { font-size:2.5rem; margin-bottom:10px; }
+    .success-title { font-family:var(--font-h); font-size:1.1rem; color:var(--accent3); margin-bottom:6px; }
+    .success-text { font-size:0.875rem; color:var(--text2); }
+  </style>
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-logo">
+      <div class="logo-mark">LF</div>
+      <div class="logo-text">Licita<span>Fácil</span></div>
+    </div>
+
+    <div class="auth-card" id="card-recuperar">
+      <h1 class="auth-title">Recuperar senha</h1>
+      <p class="auth-subtitle">Informe seu email e enviaremos as instruções</p>
+
+      <form class="auth-form" id="form-recuperar">
+        <div class="form-group">
+          <label class="form-label" for="email">Email</label>
+          <input class="input" type="email" id="email" placeholder="seu@email.com" required>
+        </div>
+        <div id="erro-msg" class="form-error" style="display:none;"></div>
+        <button type="submit" class="btn btn-primary btn-full" id="btn-recuperar">Enviar instruções</button>
+      </form>
+    </div>
+
+    <div class="auth-card hidden" id="card-sucesso">
+      <div class="success-box">
+        <div class="success-icon">📧</div>
+        <div class="success-title">Email enviado!</div>
+        <div class="success-text">Se o email estiver cadastrado, você receberá as instruções em instantes. Verifique também sua caixa de spam.</div>
+      </div>
+      <div style="margin-top:16px;text-align:center;">
+        <a href="login.html" class="btn btn-secondary">Voltar ao login</a>
+      </div>
+    </div>
+
+    <div class="auth-footer">
+      <a href="login.html">← Voltar ao login</a>
+    </div>
+  </div>
+
+  <script src="js/utils.js"></script>
+  <script>
+    document.getElementById('form-recuperar').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var btn = document.getElementById('btn-recuperar');
+      var errEl = document.getElementById('erro-msg');
+      errEl.style.display = 'none';
+
+      setLoading(btn, true, 'Enviando...');
+
+      apiPost('/api/auth/recuperar', { email: document.getElementById('email').value.trim() }).then(function() {
+        document.getElementById('card-recuperar').classList.add('hidden');
+        document.getElementById('card-sucesso').classList.remove('hidden');
+      }).catch(function(err) {
+        setLoading(btn, false, 'Enviar instruções');
+        errEl.textContent = err && err.error ? err.error : 'Erro ao enviar. Tente novamente.';
+        errEl.style.display = 'block';
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# railway.toml — Configuração para deploy no Railway
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm install && npm run setup"
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+[[services]]
+name = "licitafacil-api"

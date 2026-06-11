@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entrar — LicitaFácil</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; }
+    body::before {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none;
+      background: radial-gradient(ellipse 80% 50% at 20% 40%, rgba(0,212,255,0.06) 0%, transparent 60%),
+                  radial-gradient(ellipse 60% 40% at 80% 70%, rgba(124,58,237,0.06) 0%, transparent 60%);
+    }
+    .auth-container {
+      width: 100%; max-width: 420px;
+      display: flex; flex-direction: column; gap: 24px;
+      position: relative; z-index: 1;
+    }
+    .auth-logo {
+      display: flex; align-items: center; gap: 10px;
+      justify-content: center; margin-bottom: 8px;
+    }
+    .auth-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      padding: 32px;
+      box-shadow: var(--shadow-lg);
+    }
+    .auth-title {
+      font-family: var(--font-h);
+      font-size: 1.5rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+    .auth-subtitle {
+      text-align: center;
+      color: var(--text2);
+      font-size: 0.875rem;
+      margin-bottom: 24px;
+    }
+    .auth-form { display: flex; flex-direction: column; gap: 16px; }
+    .divider {
+      display: flex; align-items: center; gap: 12px;
+      color: var(--text3); font-size: 0.8rem;
+      margin: 4px 0;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+    .auth-footer {
+      text-align: center; font-size: 0.85rem; color: var(--text2);
+    }
+    .auth-footer a { color: var(--accent); font-weight: 600; }
+    .trial-banner {
+      background: linear-gradient(135deg, rgba(0,212,255,0.1), rgba(124,58,237,0.1));
+      border: 1px solid rgba(0,212,255,0.2);
+      border-radius: var(--r);
+      padding: 10px 14px;
+      font-size: 0.8rem;
+      color: var(--accent);
+      text-align: center;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-logo">
+      <div class="logo-mark">LF</div>
+      <div class="logo-text">Licita<span>Fácil</span></div>
+    </div>
+
+    <div class="auth-card">
+      <h1 class="auth-title">Bem-vindo de volta</h1>
+      <p class="auth-subtitle">Entre na sua conta para continuar</p>
+
+      <form class="auth-form" id="form-login">
+        <div class="form-group">
+          <label class="form-label" for="email">Email</label>
+          <input class="input" type="email" id="email" placeholder="seu@email.com" autocomplete="email" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="senha">Senha</label>
+          <input class="input" type="password" id="senha" placeholder="••••••••" autocomplete="current-password" required>
+          <div style="text-align:right;margin-top:2px;">
+            <a href="recuperar.html" style="font-size:0.78rem;color:var(--text3);">Esqueceu a senha?</a>
+          </div>
+        </div>
+
+        <div id="erro-msg" class="form-error" style="display:none;"></div>
+
+        <button type="submit" class="btn btn-primary btn-full btn-lg" id="btn-login">
+          Entrar
+        </button>
+
+        <div class="divider">ou</div>
+
+        <a href="cadastro.html" class="btn btn-secondary btn-full">
+          Criar conta grátis
+        </a>
+      </form>
+    </div>
+
+    <div class="trial-banner">
+      ✨ 15 dias grátis — sem cartão de crédito
+    </div>
+
+    <div class="auth-footer">
+      <a href="planos.html">Ver planos e preços</a>
+    </div>
+  </div>
+
+  <script src="js/utils.js"></script>
+  <script>
+    // Redirecionar se já logado
+    redirectIfLoggedIn();
+
+    document.getElementById('form-login').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var btn = document.getElementById('btn-login');
+      var errEl = document.getElementById('erro-msg');
+      errEl.style.display = 'none';
+
+      var email = document.getElementById('email').value.trim();
+      var senha = document.getElementById('senha').value;
+
+      setLoading(btn, true, 'Entrando...');
+
+      apiPost('/api/auth/login', { email: email, senha: senha }).then(function(data) {
+        showToast('Bem-vindo, ' + data.usuario.nome + '!', 'success');
+        setTimeout(function() { window.location.href = '/'; }, 500);
+      }).catch(function(err) {
+        setLoading(btn, false, 'Entrar');
+        var msg = err && err.error ? err.error : 'Erro ao fazer login. Tente novamente.';
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      });
+    });
+  </script>
+</body>
+</html>

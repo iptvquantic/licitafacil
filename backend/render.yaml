@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: licitafacil-api
+    env: node
+    plan: free
+    buildCommand: npm install && npm run setup
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: licitafacil-catalogos
+      - key: R2_PUBLIC_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: MAX_FILE_SIZE_MB
+        value: 50
+      - key: TRIAL_DAYS
+        value: 15

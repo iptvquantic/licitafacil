@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LicitaFácil — Gestão de Fornecedores com IA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app-layout" id="app-layout">
+
+  <!-- ═══════════ SIDEBAR ═══════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-mark">LF</div>
+      <div class="sidebar-header-text">
+        <div class="logo-text">Licita<span>Fácil</span></div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" onclick="showSection('busca')" id="nav-busca">
+        <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <span class="sidebar-label">Busca IA</span>
+      </button>
+
+      <button class="nav-item" onclick="showSection('fornecedores')" id="nav-fornecedores">
+        <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        <span class="sidebar-label">Fornecedores</span>
+      </button>
+
+      <button class="nav-item" onclick="showSection('config')" id="nav-config">
+        <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        <span class="sidebar-label">Configurações</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="user-card" id="user-card">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="sidebar-bottom-text">
+          <div class="user-name" id="user-nome">Carregando...</div>
+          <div class="user-plan" id="user-plano">—</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══════════ MAIN ═══════════ -->
+  <main class="main-content" id="main-content">
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="sidebar-toggle" id="btn-toggle-sidebar" onclick="toggleSidebar()" title="Recolher menu">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <span class="topbar-title" id="topbar-title">Busca Inteligente</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-ghost btn-sm" onclick="logout()" title="Sair">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          <span class="sidebar-label">Sair</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ═══ SEÇÃO: BUSCA ═══ -->
+    <section id="section-busca" class="page-content fade-in">
+      <!-- Stats -->
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon blue">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <div class="stat-label">Fornecedores</div>
+          <div class="stat-value" id="stat-fornecedores">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon purple">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+          </div>
+          <div class="stat-label">Catálogos</div>
+          <div class="stat-value" id="stat-catalogos">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </div>
+          <div class="stat-label">Trechos indexados</div>
+          <div class="stat-value" id="stat-chunks">—</div>
+        </div>
+      </div>
+
+      <!-- Barra de busca -->
+      <div class="card mb-6">
+        <div class="search-bar">
+          <div class="search-input-wrap">
+            <svg class="search-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input class="search-input" type="text" id="campo-busca"
+              placeholder="Buscar produto, material, serviço... ex: 'papel A4', 'EPI', 'cimento'"
+              autocomplete="off">
+          </div>
+          <button class="btn btn-secondary" onclick="buscar()" id="btn-buscar">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            Buscar
+          </button>
+          <button class="btn btn-primary" onclick="perguntarIA()" id="btn-ia">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+              <path d="M12 8v4l3 3"/>
+            </svg>
+            Perguntar à IA
+          </button>
+        </div>
+      </div>
+
+      <!-- Resposta IA -->
+      <div id="ia-resposta" style="display:none;margin-bottom:20px;" class="fade-in">
+        <div class="ia-box">
+          <div class="ia-header">
+            <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            Resposta da IA
+          </div>
+          <div class="ia-text" id="ia-texto">—</div>
+          <div id="ia-fontes" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;"></div>
+        </div>
+      </div>
+
+      <!-- Resultados -->
+      <div id="busca-resultados">
+        <div class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <div class="empty-title">Pronto para buscar</div>
+          <div class="empty-desc">Digite um produto ou serviço para encontrar nos catálogos dos seus fornecedores</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ SEÇÃO: FORNECEDORES ═══ -->
+    <section id="section-fornecedores" class="page-content fade-in" style="display:none;">
+      <div class="flex justify-between items-center mb-6">
+        <div>
+          <h2 style="font-size:1.2rem;margin-bottom:2px;">Fornecedores</h2>
+          <p style="font-size:0.85rem;">Gerencie seus fornecedores e catálogos</p>
+        </div>
+        <button class="btn btn-primary" onclick="openModal('modal-fornecedor')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Novo fornecedor
+        </button>
+      </div>
+
+      <!-- Filtro -->
+      <div class="card card-sm mb-4">
+        <div class="search-input-wrap">
+          <svg class="search-icon" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input class="search-input" type="text" id="filtro-fornecedores"
+            placeholder="Filtrar por nome, email ou telefone..."
+            oninput="filtrarFornecedores(this.value)"
+            style="padding-left:40px;">
+        </div>
+      </div>
+
+      <!-- Tabela -->
+      <div class="table-wrap" id="tabela-wrap">
+        <div class="empty-state"><div class="spinner spinner-lg" style="margin:0 auto;"></div></div>
+      </div>
+    </section>
+
+    <!-- ═══ SEÇÃO: DETALHE DO FORNECEDOR ═══ -->
+    <section id="section-detalhe" class="page-content fade-in" style="display:none;">
+      <div class="flex items-center gap-3 mb-6">
+        <button class="btn btn-ghost btn-sm" onclick="showSection('fornecedores')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          Voltar
+        </button>
+        <h2 style="font-size:1.2rem;" id="detalhe-nome">—</h2>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" id="detalhe-grid">
+        <!-- Contatos -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Contatos</span>
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="editarFornecedorAtual()" title="Editar">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+          </div>
+          <div id="detalhe-contatos">—</div>
+        </div>
+
+        <!-- Upload catálogo -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Adicionar catálogo</span>
+          </div>
+          <div class="upload-zone" id="upload-zone" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+            <input type="file" id="input-pdf" accept=".pdf" style="display:none;" onchange="uploadPDF(this.files[0])">
+            <div class="upload-icon">📄</div>
+            <div class="upload-text">Arraste um PDF aqui ou <a href="javascript:void(0)" onclick="document.getElementById('input-pdf').click()">clique para selecionar</a></div>
+            <div class="upload-hint">Máximo 50MB · Apenas PDF</div>
+            <div id="upload-progress" style="display:none;margin-top:12px;">
+              <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+              <div style="font-size:0.78rem;color:var(--text2);margin-top:6px;text-align:center;" id="upload-status">Enviando...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Catálogos -->
+      <div class="card" style="margin-top:20px;">
+        <div class="card-header">
+          <span class="card-title">Catálogos</span>
+          <span class="badge badge-gray" id="badge-catalogos">0</span>
+        </div>
+        <div id="lista-catalogos">
+          <div class="empty-state"><div class="empty-icon">📂</div><div class="empty-desc">Nenhum catálogo ainda. Faça upload de um PDF.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ SEÇÃO: CONFIGURAÇÕES ═══ -->
+    <section id="section-config" class="page-content fade-in" style="display:none;">
+      <h2 style="font-size:1.2rem;margin-bottom:24px;">Configurações</h2>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;">
+
+        <!-- Conta -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">Minha conta</span></div>
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div class="form-group">
+              <label class="form-label">Nome</label>
+              <input class="input" type="text" id="cfg-nome" placeholder="Seu nome">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email</label>
+              <input class="input" type="email" id="cfg-email" disabled style="opacity:0.5;cursor:not-allowed;">
+            </div>
+            <div style="border-top:1px solid var(--border);padding-top:14px;">
+              <div style="font-size:0.8rem;font-weight:600;color:var(--text2);margin-bottom:10px;">Alterar senha</div>
+              <div class="form-group">
+                <input class="input" type="password" id="cfg-senha-atual" placeholder="Senha atual">
+              </div>
+              <div class="form-group" style="margin-top:8px;">
+                <input class="input" type="password" id="cfg-senha-nova" placeholder="Nova senha">
+              </div>
+            </div>
+            <button class="btn btn-primary" onclick="salvarPerfil()">Salvar alterações</button>
+          </div>
+        </div>
+
+        <!-- Plano -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">Seu plano</span></div>
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div style="padding:16px;background:var(--surface2);border-radius:var(--r);text-align:center;">
+              <div style="font-size:0.75rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Plano atual</div>
+              <div class="stat-value" id="cfg-plano" style="font-size:1.4rem;">—</div>
+              <div style="font-size:0.82rem;color:var(--accent);margin-top:4px;" id="cfg-dias">—</div>
+            </div>
+
+            <div style="border-top:1px solid var(--border);padding-top:14px;">
+              <div style="font-size:0.8rem;font-weight:600;color:var(--text2);margin-bottom:10px;">Ativar plano pago</div>
+              <div style="font-size:0.78rem;color:var(--text3);margin-bottom:10px;">Após pagar no PagSeguro, informe seu email e plano para ativar:</div>
+              <div class="form-group">
+                <input class="input" type="email" id="ativar-email" placeholder="Seu email de cadastro">
+              </div>
+              <div class="form-group" style="margin-top:8px;">
+                <select class="input select" id="ativar-plano">
+                  <option value="">Selecione o plano</option>
+                  <option value="mensal">Mensal — R$ 97/mês</option>
+                  <option value="trimestral">Trimestral — R$ 77/mês</option>
+                  <option value="anual">Anual — R$ 57/mês</option>
+                </select>
+              </div>
+              <button class="btn btn-primary" style="margin-top:8px;" onclick="ativarPlano()">Ativar plano</button>
+              <div style="margin-top:8px;">
+                <a href="planos.html" target="_blank" class="btn btn-ghost btn-sm btn-full">Ver todos os planos →</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tema -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">Aparência</span></div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="font-size:0.8rem;color:var(--text2);margin-bottom:4px;">Tema da interface</div>
+            <button class="btn btn-secondary" onclick="aplicarTema('dark')" id="btn-tema-dark">
+              🌙 Dark (padrão)
+            </button>
+            <button class="btn btn-secondary" onclick="aplicarTema('light')" id="btn-tema-light">
+              ☀️ Light
+            </button>
+            <button class="btn btn-secondary" onclick="aplicarTema('matrix')" id="btn-tema-matrix">
+              💚 Matrix
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ═══════════ MODAL: FORNECEDOR ═══════════ -->
+<div class="modal-overlay" id="modal-fornecedor">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-fornecedor-titulo">Novo fornecedor</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-fornecedor')">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="forn-id">
+      <div class="form-group">
+        <label class="form-label">Nome *</label>
+        <input class="input" type="text" id="forn-nome" placeholder="Nome do fornecedor" required>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label class="form-label">Telefone</label>
+          <input class="input" type="tel" id="forn-telefone" placeholder="(11) 99999-9999">
+        </div>
+        <div class="form-group">
+          <label class="form-label">WhatsApp</label>
+          <input class="input" type="tel" id="forn-whatsapp" placeholder="(11) 99999-9999">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="input" type="email" id="forn-email" placeholder="contato@fornecedor.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Observações</label>
+        <textarea class="textarea" id="forn-obs" placeholder="Especialidades, condições, notas..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-fornecedor')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarFornecedor()" id="btn-salvar-forn">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL: CONFIRMAR EXCLUSÃO ═══════════ -->
+<div class="modal-overlay" id="modal-excluir">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-header">
+      <span class="modal-title">Confirmar exclusão</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-excluir')">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p>Tem certeza que deseja excluir <strong id="excluir-nome">este fornecedor</strong>? Esta ação não pode ser desfeita.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-excluir')">Cancelar</button>
+      <button class="btn btn-danger" onclick="confirmarExclusao()" id="btn-confirmar-excluir">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Mobile overlay -->
+<div id="mobile-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99;" onclick="closeMobileSidebar()"></div>
+
+<script src="js/utils.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════
+// LicitaFácil App — JS principal
+// Sem template literals aninhados, sem aspas especiais
+// ═══════════════════════════════════════════════════════════
+
+var USUARIO = null;
+var FORNECEDORES = [];
+var FORNECEDOR_ATIVO = null;
+var EXCLUIR_ID = null;
+var SIDEBAR_COLLAPSED = false;
+var debounceTimer = null;
+
+// ─── Init ─────────────────────────────────────────────────
+
+requireLogin(function(usuario) {
+  USUARIO = usuario;
+  renderUsuario();
+  carregarStats();
+  carregarFornecedores();
+
+  // Enter na busca
+  document.getElementById('campo-busca').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') buscar();
+  });
+});
+
+// ─── Usuário ──────────────────────────────────────────────
+
+function renderUsuario() {
+  if (!USUARIO) return;
+  document.getElementById('user-nome').textContent = USUARIO.nome;
+  document.getElementById('user-avatar').textContent = USUARIO.nome.charAt(0).toUpperCase();
+
+  var planoLabel = USUARIO.plano === 'trial'
+    ? ('Trial · ' + (USUARIO.dias_restantes || 0) + 'd')
+    : USUARIO.plano;
+  document.getElementById('user-plano').textContent = planoLabel;
+
+  // Config
+  document.getElementById('cfg-nome').value = USUARIO.nome;
+  document.getElementById('cfg-email').value = USUARIO.email;
+  document.getElementById('ativar-email').value = USUARIO.email;
+
+  var planoNome = USUARIO.plano === 'trial' ? 'Trial (gratuito)' : capitalize(USUARIO.plano);
+  document.getElementById('cfg-plano').textContent = planoNome;
+  var diasText = USUARIO.dias_restantes != null
+    ? (USUARIO.dias_restantes + ' dias restantes')
+    : 'Ativo';
+  document.getElementById('cfg-dias').textContent = diasText;
+}
+
+function capitalize(s) {
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// ─── Navegação ─────────────────────────────────────────────
+
+var titles = {
+  'busca': 'Busca Inteligente',
+  'fornecedores': 'Fornecedores',
+  'detalhe': 'Detalhe do Fornecedor',
+  'config': 'Configurações'
+};
+
+function showSection(nome) {
+  var sections = ['busca', 'fornecedores', 'detalhe', 'config'];
+  sections.forEach(function(s) {
+    var el = document.getElementById('section-' + s);
+    if (el) el.style.display = s === nome ? 'block' : 'none';
+  });
+
+  ['busca', 'fornecedores', 'config'].forEach(function(n) {
+    var nav = document.getElementById('nav-' + n);
+    if (nav) {
+      nav.classList.toggle('active', n === nome || (nome === 'detalhe' && n === 'fornecedores'));
+    }
+  });
+
+  document.getElementById('topbar-title').textContent = titles[nome] || '';
+
+  if (nome === 'fornecedores') carregarFornecedores();
+  if (nome === 'busca') carregarStats();
+
+  // Mobile: fechar sidebar ao navegar
+  closeMobileSidebar();
+}
+
+// ─── Sidebar ──────────────────────────────────────────────
+
+function toggleSidebar() {
+  var isMobile = window.innerWidth <= 768;
+  if (isMobile) {
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('mobile-overlay');
+    sidebar.classList.toggle('mobile-open');
+    overlay.style.display = sidebar.classList.contains('mobile-open') ? 'block' : 'none';
+  } else {
+    SIDEBAR_COLLAPSED = !SIDEBAR_COLLAPSED;
+    document.getElementById('sidebar').classList.toggle('collapsed', SIDEBAR_COLLAPSED);
+    document.getElementById('main-content').classList.toggle('sidebar-collapsed', SIDEBAR_COLLAPSED);
+  }
+}
+
+function closeMobileSidebar() {
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('mobile-overlay').style.display = 'none';
+}
+
+// ─── Stats ─────────────────────────────────────────────────
+
+function carregarStats() {
+  apiGet('/api/busca/stats').then(function(data) {
+    document.getElementById('stat-fornecedores').textContent = data.total_fornecedores;
+    document.getElementById('stat-catalogos').textContent = data.total_catalogos;
+    document.getElementById('stat-chunks').textContent = data.total_chunks;
+  }).catch(function() {});
+}
+
+// ─── Busca ──────────────────────────────────────────────────
+
+function buscar() {
+  var q = document.getElementById('campo-busca').value.trim();
+  if (!q) { showToast('Digite algo para buscar', 'warning'); return; }
+
+  document.getElementById('ia-resposta').style.display = 'none';
+
+  var btn = document.getElementById('btn-buscar');
+  setLoading(btn, true, 'Buscando...');
+
+  var html = '<div style="display:flex;align-items:center;justify-content:center;padding:40px;"><div class="spinner spinner-lg"></div></div>';
+  document.getElementById('busca-resultados').innerHTML = html;
+
+  apiPost('/api/busca', { consulta: q, limite: 8 }).then(function(data) {
+    setLoading(btn, false, 'Buscar');
+    renderResultados(data);
+  }).catch(function(err) {
+    setLoading(btn, false, 'Buscar');
+    var msg = err && err.error ? err.error : 'Erro ao buscar';
+    document.getElementById('busca-resultados').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-desc">' + esc(msg) + '</div></div>';
+  });
+}
+
+function renderResultados(data) {
+  var el = document.getElementById('busca-resultados');
+  if (!data.resultados || data.resultados.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">😔</div><div class="empty-title">Nenhum resultado encontrado</div><div class="empty-desc">Tente palavras diferentes ou adicione mais catálogos de fornecedores.</div></div>';
+    return;
+  }
+
+  var html = '<div style="display:flex;flex-direction:column;gap:12px;">';
+  data.resultados.forEach(function(r) {
+    var relevColor = r.relevancia === 'alta' ? 'badge-green' : r.relevancia === 'media' ? 'badge-yellow' : 'badge-gray';
+    var contatos = '';
+    if (r.telefone) contatos += '<span class="contact-chip">📞 ' + esc(formatPhone(r.telefone)) + '</span>';
+    if (r.whatsapp) contatos += '<a href="https://wa.me/55' + esc(r.whatsapp.replace(/\D/g,'')) + '" target="_blank" class="contact-chip" style="color:var(--accent3);">💬 WhatsApp</a>';
+    if (r.email) contatos += '<span class="contact-chip">✉ ' + esc(r.email) + '</span>';
+
+    html += '<div class="result-card" onclick="verFornecedor(' + r.fornecedor_id + ')">';
+    html += '<div class="result-header">';
+    html += '<div class="result-name">' + esc(r.nome) + '</div>';
+    html += '<div><span class="badge ' + relevColor + '">' + r.score + '% relevante</span></div>';
+    html += '</div>';
+    if (r.trecho) html += '<div class="result-trecho">' + esc(r.trecho) + '</div>';
+    if (contatos) html += '<div class="result-contacts">' + contatos + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function perguntarIA() {
+  var q = document.getElementById('campo-busca').value.trim();
+  if (!q) { showToast('Digite uma pergunta para a IA', 'warning'); return; }
+
+  var btn = document.getElementById('btn-ia');
+  var iaBox = document.getElementById('ia-resposta');
+  var iaTexto = document.getElementById('ia-texto');
+  var iaFontes = document.getElementById('ia-fontes');
+
+  setLoading(btn, true, 'Processando...');
+  iaBox.style.display = 'block';
+  iaTexto.textContent = 'A IA está analisando os catálogos...';
+  iaFontes.innerHTML = '';
+
+  apiPost('/api/busca/responder', { consulta: q }).then(function(data) {
+    setLoading(btn, false, 'Perguntar à IA');
+    iaTexto.textContent = data.resposta;
+
+    if (data.fontes && data.fontes.length > 0) {
+      var fhtml = '<div style="font-size:0.75rem;color:var(--text3);margin-bottom:6px;">Fontes consultadas:</div>';
+      data.fontes.forEach(function(f) {
+        fhtml += '<span class="badge badge-blue" style="cursor:pointer;" onclick="verFornecedor(' + f.fornecedor_id + ')">' + esc(f.nome) + '</span>';
+      });
+      iaFontes.innerHTML = fhtml;
+    }
+  }).catch(function(err) {
+    setLoading(btn, false, 'Perguntar à IA');
+    iaTexto.textContent = err && err.error ? err.error : 'Erro ao consultar a IA.';
+  });
+}
+
+// ─── Fornecedores ──────────────────────────────────────────
+
+function carregarFornecedores(filtro) {
+  var path = '/api/fornecedores';
+  if (filtro) path += '?busca=' + encodeURIComponent(filtro);
+
+  var wrap = document.getElementById('tabela-wrap');
+  wrap.innerHTML = '<div class="empty-state"><div class="spinner spinner-lg" style="margin:0 auto;"></div></div>';
+
+  apiGet(path).then(function(data) {
+    FORNECEDORES = data.fornecedores || [];
+    renderTabela();
+  }).catch(function() {
+    wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-desc">Erro ao carregar fornecedores.</div></div>';
+  });
+}
+
+var filtrarFornecedores = debounce(function(v) { carregarFornecedores(v); }, 400);
+
+function renderTabela() {
+  var wrap = document.getElementById('tabela-wrap');
+  if (FORNECEDORES.length === 0) {
+    wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">🏢</div><div class="empty-title">Nenhum fornecedor cadastrado</div><div class="empty-desc">Clique em "Novo fornecedor" para começar.</div></div>';
+    return;
+  }
+
+  var html = '<table>';
+  html += '<thead><tr><th>Fornecedor</th><th>Contato</th><th>Catálogos</th><th>Trechos</th><th style="text-align:right;">Ações</th></tr></thead>';
+  html += '<tbody>';
+
+  FORNECEDORES.forEach(function(f) {
+    html += '<tr>';
+    html += '<td>';
+    html += '<div style="font-weight:600;color:var(--text);">' + esc(f.nome) + '</div>';
+    if (f.observacoes) html += '<div style="font-size:0.78rem;color:var(--text3);">' + esc(truncate(f.observacoes, 50)) + '</div>';
+    html += '</td>';
+    html += '<td>';
+    if (f.telefone) html += '<div style="font-size:0.82rem;color:var(--text2);">📞 ' + esc(formatPhone(f.telefone)) + '</div>';
+    if (f.email) html += '<div style="font-size:0.82rem;color:var(--text2);">✉ ' + esc(f.email) + '</div>';
+    html += '</td>';
+    html += '<td><span class="badge ' + (f.total_catalogos > 0 ? 'badge-blue' : 'badge-gray') + '">' + f.total_catalogos + '</span></td>';
+    html += '<td><span class="badge ' + (f.total_chunks > 0 ? 'badge-green' : 'badge-gray') + '">' + f.total_chunks + '</span></td>';
+    html += '<td style="text-align:right;">';
+    html += '<div style="display:flex;gap:6px;justify-content:flex-end;">';
+    html += '<button class="btn btn-ghost btn-sm" data-id="' + f.id + '" onclick="verFornecedor(' + f.id + ')">Ver</button>';
+    html += '<button class="btn btn-secondary btn-sm" data-id="' + f.id + '" onclick="abrirEditar(' + f.id + ')">Editar</button>';
+    html += '<button class="btn btn-danger btn-sm" data-id="' + f.id + '" onclick="pedirExcluir(' + f.id + ')">Excluir</button>';
+    html += '</div>';
+    html += '</td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('tabela-wrap').innerHTML = html;
+}
+
+// ─── Criar / editar fornecedor ────────────────────────────
+
+function abrirEditar(id) {
+  var f = FORNECEDORES.find(function(x) { return x.id === id; });
+  if (!f) return;
+
+  document.getElementById('forn-id').value = f.id;
+  document.getElementById('forn-nome').value = f.nome || '';
+  document.getElementById('forn-telefone').value = f.telefone || '';
+  document.getElementById('forn-whatsapp').value = f.whatsapp || '';
+  document.getElementById('forn-email').value = f.email || '';
+  document.getElementById('forn-obs').value = f.observacoes || '';
+  document.getElementById('modal-fornecedor-titulo').textContent = 'Editar fornecedor';
+  openModal('modal-fornecedor');
+}
+
+function salvarFornecedor() {
+  var id = document.getElementById('forn-id').value;
+  var nome = document.getElementById('forn-nome').value.trim();
+
+  if (!nome) { showToast('Nome é obrigatório', 'warning'); return; }
+
+  var body = {
+    nome: nome,
+    telefone: document.getElementById('forn-telefone').value.trim(),
+    whatsapp: document.getElementById('forn-whatsapp').value.trim(),
+    email: document.getElementById('forn-email').value.trim(),
+    observacoes: document.getElementById('forn-obs').value.trim()
+  };
+
+  var btn = document.getElementById('btn-salvar-forn');
+  setLoading(btn, true, 'Salvando...');
+
+  var promise = id
+    ? apiPut('/api/fornecedores/' + id, body)
+    : apiPost('/api/fornecedores', body);
+
+  promise.then(function() {
+    setLoading(btn, false, 'Salvar');
+    closeModal('modal-fornecedor');
+    showToast(id ? 'Fornecedor atualizado!' : 'Fornecedor criado!', 'success');
+    limparModalFornecedor();
+    carregarFornecedores();
+    carregarStats();
+  }).catch(function(err) {
+    setLoading(btn, false, 'Salvar');
+    showToast(err && err.error ? err.error : 'Erro ao salvar', 'error');
+  });
+}
+
+function limparModalFornecedor() {
+  document.getElementById('forn-id').value = '';
+  document.getElementById('forn-nome').value = '';
+  document.getElementById('forn-telefone').value = '';
+  document.getElementById('forn-whatsapp').value = '';
+  document.getElementById('forn-email').value = '';
+  document.getElementById('forn-obs').value = '';
+  document.getElementById('modal-fornecedor-titulo').textContent = 'Novo fornecedor';
+}
+
+// Limpar modal ao fechar
+document.getElementById('modal-fornecedor').addEventListener('click', function(e) {
+  if (e.target === this) limparModalFornecedor();
+});
+
+// ─── Excluir ──────────────────────────────────────────────
+
+function pedirExcluir(id) {
+  var f = FORNECEDORES.find(function(x) { return x.id === id; });
+  EXCLUIR_ID = id;
+  document.getElementById('excluir-nome').textContent = f ? f.nome : 'este fornecedor';
+  openModal('modal-excluir');
+}
+
+function confirmarExclusao() {
+  if (!EXCLUIR_ID) return;
+  var btn = document.getElementById('btn-confirmar-excluir');
+  setLoading(btn, true, 'Excluindo...');
+
+  apiDelete('/api/fornecedores/' + EXCLUIR_ID).then(function() {
+    setLoading(btn, false, 'Excluir');
+    closeModal('modal-excluir');
+    showToast('Fornecedor excluído.', 'success');
+    EXCLUIR_ID = null;
+    carregarFornecedores();
+    carregarStats();
+  }).catch(function(err) {
+    setLoading(btn, false, 'Excluir');
+    showToast(err && err.error ? err.error : 'Erro ao excluir', 'error');
+  });
+}
+
+// ─── Detalhe do fornecedor ────────────────────────────────
+
+function verFornecedor(id) {
+  showSection('detalhe');
+  FORNECEDOR_ATIVO = id;
+  carregarDetalhe(id);
+}
+
+function carregarDetalhe(id) {
+  document.getElementById('detalhe-nome').textContent = 'Carregando...';
+  document.getElementById('detalhe-contatos').innerHTML = '<div class="spinner" style="margin:10px auto;"></div>';
+
+  apiGet('/api/fornecedores/' + id).then(function(f) {
+    document.getElementById('detalhe-nome').textContent = f.nome;
+
+    var html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+    if (f.telefone) {
+      html += '<div class="contact-chip" style="padding:8px 12px;border-radius:var(--r);">';
+      html += '<span>📞</span><span style="font-weight:500;">Telefone:</span><span>' + esc(formatPhone(f.telefone)) + '</span>';
+      html += '</div>';
+    }
+    if (f.whatsapp) {
+      html += '<a href="' + esc(f.whatsapp_link || '') + '" target="_blank" class="contact-chip" style="padding:8px 12px;border-radius:var(--r);color:var(--accent3);">';
+      html += '<span>💬</span><span style="font-weight:500;">WhatsApp:</span><span>' + esc(formatPhone(f.whatsapp)) + '</span>';
+      html += '</a>';
+    }
+    if (f.email) {
+      html += '<a href="mailto:' + esc(f.email) + '" class="contact-chip" style="padding:8px 12px;border-radius:var(--r);">';
+      html += '<span>✉</span><span style="font-weight:500;">Email:</span><span>' + esc(f.email) + '</span>';
+      html += '</a>';
+    }
+    if (f.observacoes) {
+      html += '<div style="margin-top:4px;padding:10px 12px;background:var(--surface2);border-radius:var(--r);font-size:0.85rem;color:var(--text2);">';
+      html += esc(f.observacoes) + '</div>';
+    }
+    if (!f.telefone && !f.email && !f.whatsapp && !f.observacoes) {
+      html += '<div style="color:var(--text3);font-size:0.85rem;">Nenhum contato cadastrado.</div>';
+    }
+    html += '</div>';
+    document.getElementById('detalhe-contatos').innerHTML = html;
+
+    renderCatalogos(f.catalogos || []);
+  }).catch(function() {
+    document.getElementById('detalhe-nome').textContent = 'Erro ao carregar';
+    document.getElementById('detalhe-contatos').innerHTML = '<div class="form-error">Não foi possível carregar os detalhes.</div>';
+  });
+}
+
+function editarFornecedorAtual() {
+  var f = null;
+  if (FORNECEDOR_ATIVO) {
+    f = FORNECEDORES.find(function(x) { return x.id === FORNECEDOR_ATIVO; });
+  }
+  if (f) { abrirEditar(f.id); return; }
+
+  // Buscar direto na API
+  apiGet('/api/fornecedores/' + FORNECEDOR_ATIVO).then(function(forn) {
+    document.getElementById('forn-id').value = forn.id;
+    document.getElementById('forn-nome').value = forn.nome || '';
+    document.getElementById('forn-telefone').value = forn.telefone || '';
+    document.getElementById('forn-whatsapp').value = forn.whatsapp || '';
+    document.getElementById('forn-email').value = forn.email || '';
+    document.getElementById('forn-obs').value = forn.observacoes || '';
+    document.getElementById('modal-fornecedor-titulo').textContent = 'Editar fornecedor';
+    openModal('modal-fornecedor');
+  });
+}
+
+// ─── Catálogos ────────────────────────────────────────────
+
+function renderCatalogos(catalogos) {
+  var el = document.getElementById('lista-catalogos');
+  document.getElementById('badge-catalogos').textContent = catalogos.length;
+
+  if (catalogos.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📂</div><div class="empty-desc">Nenhum catálogo ainda.</div></div>';
+    return;
+  }
+
+  var html = '<div style="display:flex;flex-direction:column;gap:8px;padding:4px 0;">';
+  catalogos.forEach(function(c) {
+    var statusBadge = '';
+    var statusClass = 'badge-gray';
+    var statusLabel = c.status;
+    if (c.status === 'processado') { statusClass = 'badge-green'; statusLabel = 'Indexado'; }
+    else if (c.status === 'processando') { statusClass = 'badge-yellow'; statusLabel = 'Processando...'; }
+    else if (c.status === 'erro') { statusClass = 'badge-red'; statusLabel = 'Erro'; }
+    else if (c.status === 'pendente') { statusClass = 'badge-gray'; statusLabel = 'Aguardando'; }
+    statusBadge = '<span class="badge ' + statusClass + '">' + statusLabel + '</span>';
+
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:var(--r);gap:10px;">';
+    html += '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">';
+    html += '<span style="font-size:1.2rem;flex-shrink:0;">📄</span>';
+    html += '<div style="min-width:0;">';
+    html += '<div style="font-size:0.85rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(c.nome_arquivo) + '">' + esc(c.nome_arquivo) + '</div>';
+    html += '<div style="font-size:0.75rem;color:var(--text3);">' + (c.paginas > 0 ? c.paginas + ' págs · ' : '') + c.total_chunks + ' trechos · ' + formatDate(c.criado_em) + '</div>';
+    html += '</div>';
+    html += '</div>';
+    html += '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">';
+    html += statusBadge;
+    if (c.status === 'erro') {
+      html += '<button class="btn btn-ghost btn-sm" onclick="reprocessarCatalogo(' + FORNECEDOR_ATIVO + ',' + c.id + ')" title="' + esc(c.erro || 'Erro') + '">↻</button>';
+    }
+    html += '<button class="btn btn-danger btn-sm btn-icon" onclick="excluirCatalogo(' + FORNECEDOR_ATIVO + ',' + c.id + ')" title="Excluir catálogo">';
+    html += '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+    html += '</button>';
+    html += '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+
+  // Auto-refresh de catalogos em processamento
+  var processando = catalogos.some(function(c) { return c.status === 'processando' || c.status === 'pendente'; });
+  if (processando) {
+    setTimeout(function() { if (FORNECEDOR_ATIVO) carregarDetalhe(FORNECEDOR_ATIVO); }, 3000);
+  }
+}
+
+function reprocessarCatalogo(fid, cid) {
+  apiPost('/api/fornecedores/' + fid + '/catalogo/' + cid + '/reprocessar', {}).then(function() {
+    showToast('Reprocessamento iniciado!', 'info');
+    setTimeout(function() { carregarDetalhe(fid); }, 1500);
+  }).catch(function(err) {
+    showToast(err && err.error ? err.error : 'Erro ao reprocessar', 'error');
+  });
+}
+
+function excluirCatalogo(fid, cid) {
+  if (!confirm('Excluir este catálogo? Os dados de busca serão removidos.')) return;
+  apiDelete('/api/fornecedores/' + fid + '/catalogo/' + cid).then(function() {
+    showToast('Catálogo excluído.', 'success');
+    carregarDetalhe(fid);
+    carregarStats();
+  }).catch(function(err) {
+    showToast(err && err.error ? err.error : 'Erro ao excluir', 'error');
+  });
+}
+
+// ─── Upload PDF ───────────────────────────────────────────
+
+function dragOver(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.add('drag-over');
+}
+function dragLeave() {
+  document.getElementById('upload-zone').classList.remove('drag-over');
+}
+function dropFile(e) {
+  e.preventDefault();
+  dragLeave();
+  var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) uploadPDF(file);
+}
+
+function uploadPDF(file) {
+  if (!file) return;
+  if (file.type !== 'application/pdf') {
+    showToast('Apenas arquivos PDF são aceitos', 'error');
+    return;
+  }
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('Arquivo muito grande. Máximo: 50MB', 'error');
+    return;
+  }
+  if (!FORNECEDOR_ATIVO) {
+    showToast('Nenhum fornecedor selecionado', 'error');
+    return;
+  }
+
+  var zone = document.getElementById('upload-zone');
+  var progress = document.getElementById('upload-progress');
+  var fill = document.getElementById('progress-fill');
+  var status = document.getElementById('upload-status');
+
+  progress.style.display = 'block';
+  zone.style.pointerEvents = 'none';
+  zone.style.opacity = '0.7';
+
+  // Simular progresso
+  var pct = 0;
+  var interval = setInterval(function() {
+    pct = Math.min(pct + 8, 85);
+    fill.style.width = pct + '%';
+  }, 150);
+
+  var fd = new FormData();
+  fd.append('catalogo', file);
+
+  apiForm('/api/fornecedores/' + FORNECEDOR_ATIVO + '/catalogo', fd).then(function() {
+    clearInterval(interval);
+    fill.style.width = '100%';
+    status.textContent = 'Upload concluído! Processando...';
+    zone.style.pointerEvents = '';
+    zone.style.opacity = '';
+    document.getElementById('input-pdf').value = '';
+
+    setTimeout(function() {
+      progress.style.display = 'none';
+      fill.style.width = '0%';
+    }, 2000);
+
+    showToast('PDF enviado! Processando em background...', 'success');
+    setTimeout(function() { if (FORNECEDOR_ATIVO) carregarDetalhe(FORNECEDOR_ATIVO); }, 1500);
+    carregarStats();
+  }).catch(function(err) {
+    clearInterval(interval);
+    zone.style.pointerEvents = '';
+    zone.style.opacity = '';
+    progress.style.display = 'none';
+    fill.style.width = '0%';
+    showToast(err && err.error ? err.error : 'Erro ao enviar PDF', 'error');
+  });
+}
+
+// ─── Configurações ────────────────────────────────────────
+
+function salvarPerfil() {
+  var body = {
+    nome: document.getElementById('cfg-nome').value.trim()
+  };
+
+  var senhaAtual = document.getElementById('cfg-senha-atual').value;
+  var senhaNova = document.getElementById('cfg-senha-nova').value;
+  if (senhaAtual && senhaNova) {
+    body.senha_atual = senhaAtual;
+    body.senha_nova = senhaNova;
+  }
+
+  apiPut('/api/auth/perfil', body).then(function() {
+    showToast('Perfil atualizado!', 'success');
+    document.getElementById('cfg-senha-atual').value = '';
+    document.getElementById('cfg-senha-nova').value = '';
+    if (body.nome) {
+      document.getElementById('user-nome').textContent = body.nome;
+      document.getElementById('user-avatar').textContent = body.nome.charAt(0).toUpperCase();
+    }
+  }).catch(function(err) {
+    showToast(err && err.error ? err.error : 'Erro ao salvar perfil', 'error');
+  });
+}
+
+function ativarPlano() {
+  var email = document.getElementById('ativar-email').value.trim();
+  var plano = document.getElementById('ativar-plano').value;
+  if (!email || !plano) { showToast('Preencha email e plano', 'warning'); return; }
+
+  apiPost('/api/auth/ativar-plano', { email: email, plano: plano }).then(function(data) {
+    showToast(data.msg || 'Plano ativado!', 'success');
+    // Recarregar dados do usuário
+    apiGet('/api/auth/me').then(function(u) {
+      USUARIO = u;
+      renderUsuario();
+    });
+  }).catch(function(err) {
+    showToast(err && err.error ? err.error : 'Erro ao ativar plano', 'error');
+  });
+}
+
+// ─── Logout ───────────────────────────────────────────────
+
+function logout() {
+  apiPost('/api/auth/logout', {}).then(function() {
+    window.location.href = '/login.html';
+  }).catch(function() {
+    window.location.href = '/login.html';
+  });
+}
+
+// ─── Responsivo ───────────────────────────────────────────
+
+window.addEventListener('resize', function() {
+  if (window.innerWidth > 768) {
+    closeMobileSidebar();
+  }
+});
+</script>
+</body>
+</html>

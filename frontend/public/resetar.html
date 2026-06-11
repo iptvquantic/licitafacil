@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nova senha — LicitaFácil</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:16px; }
+    .auth-container { width:100%; max-width:400px; display:flex; flex-direction:column; gap:20px; }
+    .auth-logo { display:flex; align-items:center; gap:10px; justify-content:center; }
+    .auth-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-xl); padding:32px; box-shadow:var(--shadow-lg); }
+    .auth-title { font-family:var(--font-h); font-size:1.4rem; font-weight:700; text-align:center; margin-bottom:6px; }
+    .auth-subtitle { text-align:center; color:var(--text2); font-size:0.875rem; margin-bottom:24px; }
+    .auth-form { display:flex; flex-direction:column; gap:16px; }
+    .token-invalid { text-align:center; padding:20px; color:var(--danger); }
+  </style>
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-logo">
+      <div class="logo-mark">LF</div>
+      <div class="logo-text">Licita<span>Fácil</span></div>
+    </div>
+
+    <div class="auth-card" id="card-resetar">
+      <h1 class="auth-title">Nova senha</h1>
+      <p class="auth-subtitle">Escolha uma nova senha para sua conta</p>
+
+      <form class="auth-form" id="form-resetar">
+        <div class="form-group">
+          <label class="form-label" for="senha">Nova senha</label>
+          <input class="input" type="password" id="senha" placeholder="Mínimo 6 caracteres" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="confirmar">Confirmar senha</label>
+          <input class="input" type="password" id="confirmar" placeholder="Repita a senha" required>
+        </div>
+        <div id="erro-msg" class="form-error" style="display:none;"></div>
+        <button type="submit" class="btn btn-primary btn-full" id="btn-resetar">Salvar nova senha</button>
+      </form>
+    </div>
+
+    <div class="auth-card hidden" id="card-invalido">
+      <div class="token-invalid">
+        <div style="font-size:2rem;margin-bottom:10px;">⚠️</div>
+        <div style="font-weight:600;margin-bottom:8px;">Link inválido ou expirado</div>
+        <div style="font-size:0.875rem;color:var(--text2);margin-bottom:16px;">Solicite um novo link de recuperação.</div>
+        <a href="recuperar.html" class="btn btn-primary">Solicitar novo link</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/utils.js"></script>
+  <script>
+    var token = new URLSearchParams(window.location.search).get('token');
+    if (!token) {
+      document.getElementById('card-resetar').classList.add('hidden');
+      document.getElementById('card-invalido').classList.remove('hidden');
+    }
+
+    document.getElementById('form-resetar').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var btn = document.getElementById('btn-resetar');
+      var errEl = document.getElementById('erro-msg');
+      errEl.style.display = 'none';
+
+      var senha = document.getElementById('senha').value;
+      var confirmar = document.getElementById('confirmar').value;
+
+      if (senha.length < 6) {
+        errEl.textContent = 'A senha deve ter pelo menos 6 caracteres';
+        errEl.style.display = 'block';
+        return;
+      }
+      if (senha !== confirmar) {
+        errEl.textContent = 'As senhas não coincidem';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      setLoading(btn, true, 'Salvando...');
+
+      apiPost('/api/auth/resetar', { token: token, senha: senha }).then(function() {
+        showToast('Senha alterada com sucesso!', 'success');
+        setTimeout(function() { window.location.href = 'login.html'; }, 1200);
+      }).catch(function(err) {
+        setLoading(btn, false, 'Salvar nova senha');
+        var msg = err && err.error ? err.error : 'Link inválido ou expirado.';
+        if (msg.includes('inválido') || msg.includes('expirado')) {
+          document.getElementById('card-resetar').classList.add('hidden');
+          document.getElementById('card-invalido').classList.remove('hidden');
+        } else {
+          errEl.textContent = msg;
+          errEl.style.display = 'block';
+        }
+      });
+    });
+  </script>
+</body>
+</html>
