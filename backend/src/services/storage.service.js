@@ -1,82 +1,63 @@
-// src/services/storage.service.js
-const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+// src/services/storage.service.js — Supabase Storage
+const { createClient } = require('@supabase/supabase-js');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 
-let s3Client = null;
+let supabase = null;
 
 function getClient() {
-  if (!s3Client) {
-    s3Client = new S3Client({
-      region: 'auto',
-      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-      },
-    });
+  if (!supabase) {
+    supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_KEY
+    );
   }
-  return s3Client;
+  return supabase;
 }
 
-async function uploadFile(buffer, originalName, mimeType, folder = 'catalogos') {
+async function uploadFile(buffer, originalName, mimeType, folder) {
+  folder = folder || 'catalogos';
   const ext = path.extname(originalName).toLowerCase();
-  const key = `${folder}/${uuidv4()}${ext}`;
+  const key = folder + '/' + uuidv4() + ext;
 
-  const command = new PutObjectCommand({
-    Bucket: process.env.R2_BUCKET,
-    Key: key,
-    Body: buffer,
-    ContentType: mimeType,
-    Metadata: {
-      originalName: encodeURIComponent(originalName),
-      uploadedAt: new Date().toISOString(),
-    },
-  });
+  const { data, error } = await getClient()
+    .storage
+    .from('catalogos')
+    .upload(key, buffer, { contentType: mimeType, upsert: false });
 
-  await getClient().send(command);
+  if (error) throw new Error('Erro ao fazer upload: ' + error.message);
 
-  return {
-    key,
-    url: `${process.env.R2_PUBLIC_URL}/${key}`,
-    size: buffer.length,
-  };
+  const { data: urlData } = getClient()
+    .storage
+    .from('catalogos')
+    .getPublicUrl(key);
+
+  return { key: key, url: urlData.publicUrl, size: buffer.length };
 }
 
 async function deleteFile(key) {
   try {
-    const command = new DeleteObjectCommand({
-      Bucket: process.env.R2_BUCKET,
-      Key: key,
-    });
-    await getClient().send(command);
-    return true;
+    const { error } = await getClient().storage.from('catalogos').remove([key]);
+    if (error) console.error('Erro ao deletar:', error.message);
+    return !error;
   } catch (err) {
-    console.error('Erro ao deletar arquivo do R2:', err);
+    console.error('Erro ao deletar arquivo:', err);
     return false;
   }
 }
 
-async function getSignedDownloadUrl(key, expiresIn = 3600) {
-  const command = new GetObjectCommand({
-    Bucket: process.env.R2_BUCKET,
-    Key: key,
-  });
-  return getSignedUrl(getClient(), command, { expiresIn });
+async function getFileBuffer(key) {
+  const { data, error } = await getClient().storage.from('catalogos').download(key);
+  if (error) throw new Error('Erro ao baixar arquivo: ' + error.message);
+  const arrayBuffer = await data.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }
 
-async function getFileBuffer(key) {
-  const command = new GetObjectCommand({
-    Bucket: process.env.R2_BUCKET,
-    Key: key,
-  });
-  const response = await getClient().send(command);
-  const chunks = [];
-  for await (const chunk of response.Body) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
+async function getSignedDownloadUrl(key, expiresIn) {
+  expiresIn = expiresIn || 3600;
+  const { data, error } = await getClient().storage.from('catalogos').createSignedUrl(key, expiresIn);
+  if (error) throw new Error('Erro ao gerar URL: ' + error.message);
+  return data.signedUrl;
 }
 
 module.exports = { uploadFile, deleteFile, getSignedDownloadUrl, getFileBuffer };
