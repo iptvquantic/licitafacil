@@ -3,7 +3,7 @@
 
 var API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:3000'
-  : 'https://licitafacil-api.railway.app'; // ← substituir pela URL real do Railway/Render
+  : 'https://licitafacil-api-kxks.onrender.com'; // ← substituir pela URL real do Railway/Render
 
 // ─── Requisições ──────────────────────────────────────────────────────────────
 
