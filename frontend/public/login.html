@@ -135,7 +135,7 @@
 
       apiPost('/api/auth/login', { email: email, senha: senha }).then(function(data) {
         showToast('Bem-vindo, ' + data.usuario.nome + '!', 'success');
-        setTimeout(function() { window.location.href = '/'; }, 500);
+        localStorage.setItem('lf_token', data.token); setTimeout(function() { window.location.href = '/' ; }, 300);
       }).catch(function(err) {
         setLoading(btn, false, 'Entrar');
         var msg = err && err.error ? err.error : 'Erro ao fazer login. Tente novamente.';

@@ -127,7 +127,7 @@
 
       apiPost('/api/auth/cadastro', { nome: nome, email: email, senha: senha }).then(function(data) {
         showToast('Conta criada! Bem-vindo ao LicitaFácil!', 'success');
-        setTimeout(function() { window.location.href = '/'; }, 700);
+        localStorage.setItem('lf_token', data.token); setTimeout(function() { window.location.href = '/' ; }, 300);
       }).catch(function(err) {
         setLoading(btn, false, 'Criar conta grátis');
         var msg = err && err.error ? err.error : 'Erro ao criar conta. Tente novamente.';
