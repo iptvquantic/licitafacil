@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const authRoutes = require('./routes/auth');
 const fornecedoresRoutes = require('./routes/fornecedores');
 const buscaRoutes = require('./routes/busca');
+const extracaoRoutes = require('./routes/extracao');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,6 +55,7 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/fornecedores', apiLimiter, fornecedoresRoutes);
 app.use('/api/busca', apiLimiter, buscaRoutes);
+app.use('/api/extracao', apiLimiter, extracaoRoutes);
 
 app.use('/api/*', (req, res) => { res.status(404).json({ error: 'Rota não encontrada' }); });
 

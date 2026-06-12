@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <title>LicitaFácil — Gestão de Fornecedores com IA</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@600;700;800&display=swap">
@@ -71,8 +72,9 @@
         </button>
         <span class="topbar-title" id="topbar-title">Busca Inteligente</span>
       </div>
-      <div class="topbar-right">
-        <button class="btn btn-ghost btn-sm" onclick="logout()" title="Sair">
+      <div class="topbar-right" style="gap:8px;">
+        <div style="display:flex;gap:4px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:3px;"><button class="btn btn-ghost btn-sm" onclick="aplicarTema('dark')" title="Dark" style="padding:5px 8px;">🌙</button><button class="btn btn-ghost btn-sm" onclick="aplicarTema('light')" title="Light" style="padding:5px 8px;">☀️</button><button class="btn btn-ghost btn-sm" onclick="aplicarTema('matrix')" title="Matrix" style="padding:5px 8px;">💚</button></div>
+          <button class="btn btn-ghost btn-sm" onclick="logout()" title="Sair">
           <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
             <polyline points="16 17 21 12 16 7"/>
@@ -383,6 +385,11 @@
         <textarea class="textarea" id="forn-obs" placeholder="Especialidades, condições, notas..."></textarea>
       </div>
     </div>
+      <div class="form-group" style="padding:0 24px 0;">
+              <label class="form-label">Catálogo PDF <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
+              <input type="file" id="forn-pdf" accept=".pdf,image/jpeg,image/png,image/webp" class="input" style="padding:8px;cursor:pointer;">
+              <div class="form-hint">PDF ou imagem — será indexado automaticamente pela IA</div>
+            </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-fornecedor')">Cancelar</button>
       <button class="btn btn-primary" onclick="salvarFornecedor()" id="btn-salvar-forn">Salvar</button>
@@ -710,17 +717,31 @@ function salvarFornecedor() {
   var btn = document.getElementById('btn-salvar-forn');
   setLoading(btn, true, 'Salvando...');
 
+  var pdfFile = document.getElementById('forn-pdf') ? document.getElementById('forn-pdf').files[0] : null;
   var promise = id
     ? apiPut('/api/fornecedores/' + id, body)
     : apiPost('/api/fornecedores', body);
 
-  promise.then(function() {
+  promise.then(function(data) {
     setLoading(btn, false, 'Salvar');
     closeModal('modal-fornecedor');
     showToast(id ? 'Fornecedor atualizado!' : 'Fornecedor criado!', 'success');
+    var fornId = data.fornecedor ? data.fornecedor.id : id;
     limparModalFornecedor();
     carregarFornecedores();
     carregarStats();
+    // Upload PDF se selecionado
+    if (pdfFile && fornId) {
+      showToast('Enviando catálogo para indexação...', 'info');
+      var fd = new FormData();
+      fd.append('arquivo', pdfFile);
+      apiForm('/api/extracao/catalogo/' + fornId, fd).then(function() {
+        showToast('Catálogo enviado! Indexando com IA...', 'success');
+        carregarStats();
+      }).catch(function(err) {
+        showToast('Fornecedor salvo, mas erro no PDF: ' + (err && err.error ? err.error : 'erro'), 'warning');
+      });
+    }
   }).catch(function(err) {
     setLoading(btn, false, 'Salvar');
     showToast(err && err.error ? err.error : 'Erro ao salvar', 'error');
@@ -958,7 +979,7 @@ function uploadPDF(file) {
   var fd = new FormData();
   fd.append('catalogo', file);
 
-  apiForm('/api/fornecedores/' + FORNECEDOR_ATIVO + '/catalogo', fd).then(function() {
+  apiForm('/api/extracao/catalogo/' + FORNECEDOR_ATIVO, fd).then(function() {
     clearInterval(interval);
     fill.style.width = '100%';
     status.textContent = 'Upload concluído! Processando...';
