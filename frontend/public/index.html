@@ -977,7 +977,7 @@ function uploadPDF(file) {
   }, 150);
 
   var fd = new FormData();
-  fd.append('catalogo', file);
+  fd.append('arquivo', file);
 
   apiForm('/api/extracao/catalogo/' + FORNECEDOR_ATIVO, fd).then(function() {
     clearInterval(interval);
