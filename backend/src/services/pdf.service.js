@@ -232,6 +232,8 @@ async function processarPDF(catalogoId, storageKey) {
   }
 }
 
+const { tokenizar, calcularTFIDF, cosineSimilarity } = require('../utils/texto');
+
 module.exports = {
   processarPDF,
   extrairTexto,

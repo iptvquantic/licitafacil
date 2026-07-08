@@ -1,6 +1,6 @@
 // src/services/busca.service.js
 const { query } = require('../utils/db');
-const { tokenizar, calcularTFIDF, cosineSimilarity } = require('./pdf.service');
+const { tokenizar, calcularTFIDF, cosineSimilarity } = require('../utils/texto');
 
 // ─── Busca híbrida ────────────────────────────────────────────────────────────
 
