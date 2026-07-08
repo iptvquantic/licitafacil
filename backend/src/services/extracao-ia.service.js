@@ -67,3 +67,4 @@ async function extrairComOpenRouter(buffer, mimetype) {
 }
 
 module.exports = { extrairComOpenRouter };
+// 1783469381
