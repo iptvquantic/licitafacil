@@ -238,6 +238,20 @@ async function extrairComIA(catalogoId, fornecedorId, buffer, mimetype, filename
 
     console.log('Extração concluída: ' + chunks.length + ' chunks, ' + (dadosIA ? dadosIA.total_products : 0) + ' produtos');
 
+    // Auto-deletar PDF do storage após 5 minutos (economia de espaço)
+    if (storageKey) {
+      setTimeout(async function() {
+        try {
+          const { deleteFile } = require('../services/storage.service');
+          await deleteFile(storageKey);
+          await query('UPDATE catalogos SET storage_path = NULL WHERE id = $1', [catalogoId]);
+          console.log('PDF removido do storage após extração: ' + storageKey);
+        } catch(e) {
+          console.log('Aviso: não foi possível remover PDF do storage:', e.message);
+        }
+      }, 5 * 60 * 1000);
+    }
+
   } catch (err) {
     console.error('Erro na extração IA, usando fallback:', err.message);
 

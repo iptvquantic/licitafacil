@@ -2,10 +2,22 @@
 const { query } = require('../utils/db');
 const { tokenizar, calcularTFIDF, cosineSimilarity } = require('../utils/texto');
 
+// Tokenizacao especial para referencias tecnicas (preserva numeros, medidas, codigos)
+function tokenizarTecnico(texto) {
+  var tokens = tokenizar(texto);
+  // Extrair referencias tecnicas: 3x2,5mm / PP3x25 / 750V / 2,5mm2 etc
+  var regexRef = /\d+[xX,\.]\d+[\w]*/g;
+  var refs = texto.match(regexRef) || [];
+  // Extrair codigos alfanumericos: PP, EPR, XLPE, NR10, etc
+  var regexCod = /[A-Z]{2,6}\d*/g;
+  var cods = texto.match(regexCod) || [];
+  return tokens.concat(refs).concat(cods.map(function(c){return c.toLowerCase();}));
+}
+
 // ─── Busca híbrida ────────────────────────────────────────────────────────────
 
 async function buscaHibrida(consulta, usuarioId, limite = 5) {
-  const tokensConsulta = tokenizar(consulta);
+  const tokensConsulta = tokenizarTecnico(consulta);
   if (tokensConsulta.length === 0) {
     return { resultados: [], total: 0 };
   }
@@ -35,7 +47,7 @@ async function buscaHibrida(consulta, usuarioId, limite = 5) {
   // Calcular score para cada chunk
   const scores = chunks.map(chunk => {
     // Score keyword (0-1): proporção de tokens da consulta presentes no chunk
-    const tokensChunk = tokenizar(chunk.conteudo);
+    const tokensChunk = tokenizarTecnico(chunk.conteudo);
     const intersecao = tokensConsulta.filter(t => tokensChunk.includes(t)).length;
     const keywordScore = intersecao / Math.max(tokensConsulta.length, 1);
 
