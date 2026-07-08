@@ -151,28 +151,11 @@ async function extrairComIA(catalogoId, fornecedorId, buffer, mimetype, filename
           { type: 'text', text: PROMPT_EXTRACAO }
         ]};
 
-    // Chamar Claude API via Anthropic
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': process.env.ANTHROPIC_API_KEY || '',
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
-        messages: [mensagem]
-      })
-    });
-
-    if (!response.ok) {
-      // Fallback: usar OpenRouter com extração simples se Claude falhar
-      throw new Error('Claude API indisponível: ' + response.status);
-    }
-
-    const data = await response.json();
-    const textoResposta = data.content?.[0]?.text || '';
+    // Usar OpenRouter Vision (gratuito)
+    const { extrairComOpenRouter } = require('../services/extracao-ia.service');
+    const resultIA = await extrairComOpenRouter(buffer, mimetype);
+    const textoResposta = resultIA.texto || '';
+    if (resultIA.dadosIA) dadosIA = resultIA.dadosIA;
 
     // Parsear JSON da resposta
     try {
