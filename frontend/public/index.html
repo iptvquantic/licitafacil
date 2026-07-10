@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="css/app.css">
   <style>
     /* ─── TAMANHOS DE FONTE ─────────────────────────────── */
-    :root { --base-font: 15px; }
+    :root { --base-font: 15px; --sidebar-w: 168px; }
     [data-font-size="pequeno"]    { --base-font: 13px; }
     [data-font-size="padrao"]     { --base-font: 15px; }
     [data-font-size="grande"]     { --base-font: 17px; }
@@ -603,8 +603,8 @@
     <!-- TOPBAR -->
     <header class="topbar">
       <div class="topbar-left">
-        <button class="sidebar-toggle" onclick="toggleSidebar()">
-          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <button class="sidebar-toggle" onclick="toggleSidebar()" id="btn-toggle-sidebar" style="background:var(--accent);border-color:var(--accent);color:#000;width:32px;height:32px;">
+          <svg id="toggle-icon" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
         <span class="topbar-title" id="topbar-title">Busca Inteligente</span>
       </div>
@@ -1001,6 +1001,7 @@ function showSection(nome) {
 }
 
 function toggleSidebar() {
+  var icon = document.getElementById('toggle-icon');
   if (window.innerWidth <= 768) {
     document.getElementById('sidebar').classList.toggle('mobile-open');
     document.getElementById('mobile-overlay').style.display = document.getElementById('sidebar').classList.contains('mobile-open') ? 'block' : 'none';
@@ -1008,6 +1009,12 @@ function toggleSidebar() {
     SIDEBAR_COLLAPSED = !SIDEBAR_COLLAPSED;
     document.getElementById('sidebar').classList.toggle('collapsed', SIDEBAR_COLLAPSED);
     document.getElementById('main-content').classList.toggle('sidebar-collapsed', SIDEBAR_COLLAPSED);
+    // Trocar direção da seta
+    if (icon) {
+      icon.innerHTML = SIDEBAR_COLLAPSED
+        ? '<polyline points="9 18 15 12 9 6"/>'
+        : '<polyline points="15 18 9 12 15 6"/>';
+    }
   }
 }
 function closeMobileSidebar() {
