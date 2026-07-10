@@ -1,18 +1,570 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-theme="dark">
+<html lang="pt-BR" data-theme="dark" data-font-size="padrao">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <title>LicitaFácil — Gestão de Fornecedores com IA</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@600;700;800&display=swap">
   <link rel="stylesheet" href="css/app.css">
+  <style>
+    /* ─── TAMANHOS DE FONTE ─────────────────────────────── */
+    :root { --base-font: 15px; }
+    [data-font-size="pequeno"]    { --base-font: 13px; }
+    [data-font-size="padrao"]     { --base-font: 15px; }
+    [data-font-size="grande"]     { --base-font: 17px; }
+    [data-font-size="muitogrande"]{ --base-font: 20px; }
+
+    html { font-size: var(--base-font); }
+
+    /* ─── CORES VIVAS — sobrescrever muted/fraco ────────── */
+    :root {
+      --text:  #f0f4ff;
+      --text2: #b8c8e8;
+      --text3: #7a90b8;
+    }
+    [data-theme="light"] {
+      --text:  #0a1628;
+      --text2: #2a3a5a;
+      --text3: #4a5a7a;
+    }
+    [data-theme="matrix"] {
+      --text:  #ccffcc;
+      --text2: #88ee88;
+      --text3: #44aa44;
+    }
+
+    /* ─── SELETOR DE FONTE NO TOPBAR ───────────────────── */
+    .font-selector {
+      display: flex;
+      gap: 3px;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: var(--r);
+      padding: 3px;
+    }
+    .font-btn {
+      border: none;
+      background: transparent;
+      color: var(--text2);
+      cursor: pointer;
+      border-radius: 6px;
+      padding: 4px 9px;
+      font-family: var(--font);
+      font-weight: 600;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      line-height: 1;
+    }
+    .font-btn:hover { background: var(--surface2); color: var(--text); }
+    .font-btn.ativo {
+      background: var(--accent);
+      color: #000;
+    }
+    .font-btn.f-p  { font-size: 10px; }
+    .font-btn.f-m  { font-size: 12px; }
+    .font-btn.f-g  { font-size: 14px; }
+    .font-btn.f-mg { font-size: 16px; }
+
+    /* ─── TOPBAR APRIMORADA ─────────────────────────────── */
+    .topbar {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      height: auto;
+      min-height: 60px;
+      padding: 10px 20px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .topbar-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .theme-selector {
+      display: flex;
+      gap: 3px;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: var(--r);
+      padding: 3px;
+    }
+    .theme-btn {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 0.85rem;
+      transition: all 0.15s ease;
+    }
+    .theme-btn:hover { background: var(--surface2); }
+    .theme-btn.ativo { background: var(--accent); }
+
+    /* ─── STATS CARDS ───────────────────────────────────── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .stat-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      transition: border-color 0.2s;
+    }
+    .stat-box:hover { border-color: var(--accent); }
+    .stat-icon-box {
+      width: 48px; height: 48px;
+      border-radius: var(--r);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem;
+      flex-shrink: 0;
+    }
+    .stat-icon-box.blue   { background: rgba(0,212,255,0.12); }
+    .stat-icon-box.purple { background: rgba(124,58,237,0.12); }
+    .stat-icon-box.green  { background: rgba(16,185,129,0.12); }
+    .stat-num {
+      font-family: var(--font-h);
+      font-size: 2rem;
+      font-weight: 700;
+      line-height: 1;
+      color: var(--text);
+    }
+    .stat-lbl {
+      font-size: 0.8rem;
+      color: var(--text2);
+      margin-top: 3px;
+      font-weight: 500;
+    }
+
+    /* ─── CAMPO DE BUSCA APRIMORADO ─────────────────────── */
+    .busca-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+    .busca-hint {
+      font-size: 0.82rem;
+      color: var(--text2);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .busca-hint span { color: var(--text3); }
+    .hint-tag {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--accent);
+      font-size: 0.78rem;
+      padding: 2px 10px;
+      border-radius: 99px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .hint-tag:hover { background: var(--accent); color: #000; }
+    .busca-row {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+    }
+    .busca-input-wrap { flex: 1; position: relative; }
+    .busca-input-wrap input {
+      width: 100%;
+      padding: 14px 18px 14px 48px;
+      font-size: 1rem;
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: var(--r-lg);
+      color: var(--text);
+      font-family: var(--font);
+      transition: all 0.2s;
+    }
+    .busca-input-wrap input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,212,255,0.12);
+    }
+    .busca-input-wrap input::placeholder { color: var(--text3); }
+    .busca-icon {
+      position: absolute;
+      left: 16px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--text3);
+      pointer-events: none;
+    }
+
+    /* ─── BOTÕES DE AÇÃO ────────────────────────────────── */
+    .btn-buscar-main {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 20px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--r-lg);
+      color: var(--text);
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      font-family: var(--font);
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .btn-buscar-main:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-ia-main {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 22px;
+      background: var(--accent);
+      border: none;
+      border-radius: var(--r-lg);
+      color: #000;
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      font-family: var(--font);
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .btn-ia-main:hover { filter: brightness(1.1); box-shadow: 0 0 24px rgba(0,212,255,0.35); }
+    .btn-ia-main:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ─── RESPOSTA DA IA ────────────────────────────────── */
+    .ia-card {
+      background: linear-gradient(135deg, rgba(0,212,255,0.05), rgba(124,58,237,0.05));
+      border: 1px solid rgba(0,212,255,0.25);
+      border-radius: var(--r-xl);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .ia-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .ia-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+    .ia-label-text {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .ia-texto {
+      font-size: 0.95rem;
+      color: var(--text);
+      line-height: 1.85;
+      white-space: pre-wrap;
+    }
+    .ia-fontes-row {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* ─── RESULTADO DE BUSCA ────────────────────────────── */
+    .resultado-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      padding: 22px 24px;
+      margin-bottom: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .resultado-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), 0 8px 32px rgba(0,212,255,0.1);
+      transform: translateY(-1px);
+    }
+    .resultado-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .resultado-nome {
+      font-family: var(--font-h);
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .resultado-especialidade {
+      font-size: 0.82rem;
+      color: var(--text2);
+      margin-top: 3px;
+    }
+    .relevancia-badge {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    .rel-pill {
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 99px;
+    }
+    .rel-alta   { background: rgba(16,185,129,0.15); color: #34d399; }
+    .rel-media  { background: rgba(245,158,11,0.15);  color: #fbbf24; }
+    .rel-baixa  { background: rgba(100,116,139,0.15); color: #94a3b8; }
+    .rel-score  { font-size: 0.7rem; color: var(--text3); }
+    .trecho-box {
+      background: var(--bg2);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 var(--r) var(--r) 0;
+      padding: 12px 16px;
+      font-size: 0.85rem;
+      color: var(--text2);
+      line-height: 1.7;
+      margin-bottom: 14px;
+    }
+    .contatos-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .contato-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.8rem;
+      padding: 6px 14px;
+      border-radius: 99px;
+      border: 1px solid var(--border2);
+      background: var(--surface2);
+      color: var(--text2);
+      text-decoration: none;
+      transition: all 0.15s;
+      cursor: pointer;
+    }
+    .contato-chip:hover { border-color: var(--accent); color: var(--accent); }
+    .contato-chip.wpp:hover { border-color: #34d399; color: #34d399; }
+    .contato-chip.ver { border-color: rgba(0,212,255,0.3); color: var(--accent); }
+    .contato-chip.ver:hover { background: var(--accent); color: #000; }
+
+    /* ─── TABELA FORNECEDORES ───────────────────────────── */
+    .table-wrap {
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: var(--surface2); border-bottom: 2px solid var(--border); }
+    th {
+      padding: 14px 18px;
+      text-align: left;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+    td { padding: 14px 18px; border-bottom: 1px solid var(--border); vertical-align: middle; color: var(--text); }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr { transition: background 0.15s; }
+    tbody tr:hover { background: rgba(0,212,255,0.03); }
+    .cell-nome { font-weight: 600; font-size: 0.95rem; color: var(--text); }
+    .cell-obs  { font-size: 0.8rem; color: var(--text2); margin-top: 3px; }
+    .cell-contato { font-size: 0.83rem; color: var(--text2); }
+    .cell-contato a { color: var(--accent3); text-decoration: none; }
+
+    /* ─── DETALHE FORNECEDOR ────────────────────────────── */
+    .forn-header {
+      background: linear-gradient(135deg, var(--surface), rgba(0,212,255,0.03));
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      padding: 28px;
+      margin-bottom: 20px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 20px;
+      align-items: start;
+    }
+    .forn-avatar {
+      width: 60px; height: 60px;
+      border-radius: var(--r-lg);
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-h);
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .forn-nome-big {
+      font-family: var(--font-h);
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .forn-espec {
+      font-size: 0.88rem;
+      color: var(--text2);
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+    .forn-contatos-grid {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* ─── DETALHE GRID ──────────────────────────────────── */
+    .detalhe-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    /* ─── UPLOAD AREA ───────────────────────────────────── */
+    .upload-area {
+      border: 2px dashed var(--border2);
+      border-radius: var(--r-xl);
+      padding: 36px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--bg2);
+    }
+    .upload-area:hover, .upload-area.drag-over {
+      border-color: var(--accent);
+      background: rgba(0,212,255,0.04);
+    }
+    .upload-emoji { font-size: 2.8rem; margin-bottom: 10px; }
+    .upload-titulo { font-size: 0.95rem; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .upload-sub { font-size: 0.82rem; color: var(--text2); }
+    .upload-sub a { color: var(--accent); }
+    .upload-dica {
+      margin-top: 16px;
+      background: rgba(0,212,255,0.06);
+      border: 1px solid rgba(0,212,255,0.15);
+      border-radius: var(--r);
+      padding: 12px 14px;
+      font-size: 0.8rem;
+      color: var(--text2);
+      line-height: 1.5;
+      text-align: left;
+    }
+    .upload-dica strong { color: var(--accent); }
+    .prog-bar {
+      height: 6px;
+      background: var(--surface2);
+      border-radius: 99px;
+      overflow: hidden;
+      margin-top: 14px;
+      display: none;
+    }
+    .prog-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 99px;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    /* ─── CATALOGO ITEM ─────────────────────────────────── */
+    .cat-item {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 16px;
+      background: var(--surface2);
+      border-radius: var(--r-lg);
+      margin-bottom: 8px;
+      border: 1px solid transparent;
+      transition: border-color 0.15s;
+    }
+    .cat-item:hover { border-color: var(--border2); }
+    .cat-ico {
+      width: 42px; height: 42px;
+      background: rgba(0,212,255,0.08);
+      border-radius: var(--r);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+    .cat-info { flex: 1; min-width: 0; }
+    .cat-nome { font-weight: 600; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+    .cat-meta { font-size: 0.75rem; color: var(--text3); margin-top: 2px; }
+    .cat-acoes { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+    /* ─── TABELA DE PRODUTOS ────────────────────────────── */
+    .prod-table-wrap {
+      overflow-x: auto;
+      border-radius: var(--r-lg);
+      border: 1px solid var(--border);
+      margin-top: 8px;
+    }
+    .prod-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .prod-table thead { background: rgba(0,212,255,0.06); border-bottom: 2px solid rgba(0,212,255,0.2); }
+    .prod-table th { padding: 13px 16px; font-size: 0.72rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; text-align: left; white-space: nowrap; }
+    .prod-table td { padding: 13px 16px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; line-height: 1.5; }
+    .prod-table tbody tr:last-child td { border-bottom: none; }
+    .prod-table tbody tr:hover { background: rgba(0,212,255,0.03); }
+    .prod-nome { font-weight: 600; font-size: 0.9rem; color: var(--text); }
+    .prod-desc { font-size: 0.8rem; color: var(--text2); margin-top: 3px; line-height: 1.5; }
+    .prod-code { font-family: monospace; font-size: 0.8rem; background: var(--surface2); padding: 2px 8px; border-radius: 4px; color: var(--accent); }
+    .prod-norma { display: inline-block; font-size: 0.7rem; background: rgba(16,185,129,0.1); color: #34d399; border: 1px solid rgba(16,185,129,0.2); padding: 2px 8px; border-radius: 99px; }
+
+    /* ─── EMPTY STATE ───────────────────────────────────── */
+    .empty-box {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 56px 24px; text-align: center; gap: 10px;
+    }
+    .empty-box .ei { font-size: 3.5rem; opacity: 0.45; }
+    .empty-box .eh { font-family: var(--font-h); font-size: 1.05rem; color: var(--text2); }
+    .empty-box .ep { font-size: 0.85rem; color: var(--text3); max-width: 260px; line-height: 1.6; }
+
+    /* ─── CONFIG PAGE ───────────────────────────────────── */
+    .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+    .plano-box { padding: 22px; background: var(--surface2); border-radius: var(--r-lg); text-align: center; margin-bottom: 14px; }
+    .plano-box .plano-label { font-size: 0.72rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+    .plano-box .plano-nome { font-family: var(--font-h); font-size: 1.5rem; font-weight: 700; color: var(--text); }
+    .plano-box .plano-dias { font-size: 0.85rem; color: var(--accent); margin-top: 4px; }
+
+    /* ─── RESPONSIVO ────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .stats-row { grid-template-columns: 1fr; }
+      .detalhe-cols { grid-template-columns: 1fr; }
+      .forn-header { grid-template-columns: auto 1fr; }
+      .busca-row { flex-direction: column; }
+      .topbar-controls { gap: 6px; }
+    }
+    @media (max-width: 480px) {
+      .forn-header { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
 <body>
 <div class="app-layout" id="app-layout">
 
-  <!-- ═══════════ SIDEBAR ═══════════ -->
+  <!-- ══ SIDEBAR ══════════════════════════════════════════ -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="logo-mark">LF</div>
@@ -20,32 +572,20 @@
         <div class="logo-text">Licita<span>Fácil</span></div>
       </div>
     </div>
-
     <nav class="sidebar-nav">
       <button class="nav-item active" onclick="showSection('busca')" id="nav-busca">
-        <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-        </svg>
+        <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         <span class="sidebar-label">Busca IA</span>
       </button>
-
       <button class="nav-item" onclick="showSection('fornecedores')" id="nav-fornecedores">
-        <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-        </svg>
+        <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         <span class="sidebar-label">Fornecedores</span>
       </button>
-
       <button class="nav-item" onclick="showSection('config')" id="nav-config">
-        <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-        </svg>
+        <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <span class="sidebar-label">Configurações</span>
       </button>
     </nav>
-
     <div class="sidebar-bottom">
       <div class="user-card" id="user-card">
         <div class="user-avatar" id="user-avatar">?</div>
@@ -57,289 +597,240 @@
     </div>
   </aside>
 
-  <!-- ═══════════ MAIN ═══════════ -->
+  <!-- ══ MAIN ═════════════════════════════════════════════ -->
   <main class="main-content" id="main-content">
 
-    <!-- Top bar -->
+    <!-- TOPBAR -->
     <header class="topbar">
       <div class="topbar-left">
-        <button class="sidebar-toggle" id="btn-toggle-sidebar" onclick="toggleSidebar()" title="Recolher menu">
-          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <line x1="3" y1="6" x2="21" y2="6"/>
-            <line x1="3" y1="12" x2="21" y2="12"/>
-            <line x1="3" y1="18" x2="21" y2="18"/>
-          </svg>
+        <button class="sidebar-toggle" onclick="toggleSidebar()">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
         <span class="topbar-title" id="topbar-title">Busca Inteligente</span>
       </div>
-      <div class="topbar-right" style="gap:8px;">
-        <div style="display:flex;gap:4px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:3px;"><button class="btn btn-ghost btn-sm" onclick="aplicarTema('dark')" title="Dark" style="padding:5px 8px;">🌙</button><button class="btn btn-ghost btn-sm" onclick="aplicarTema('light')" title="Light" style="padding:5px 8px;">☀️</button><button class="btn btn-ghost btn-sm" onclick="aplicarTema('matrix')" title="Matrix" style="padding:5px 8px;">💚</button></div>
-          <button class="btn btn-ghost btn-sm" onclick="logout()" title="Sair">
-          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
+      <div class="topbar-controls">
+
+        <!-- SELETOR DE FONTE -->
+        <div class="font-selector" title="Tamanho do texto">
+          <button class="font-btn f-p" onclick="setFonte('pequeno')"    id="fb-pequeno"    title="Texto pequeno">A</button>
+          <button class="font-btn f-m ativo" onclick="setFonte('padrao')" id="fb-padrao"  title="Texto padrão">A</button>
+          <button class="font-btn f-g" onclick="setFonte('grande')"     id="fb-grande"     title="Texto grande">A</button>
+          <button class="font-btn f-mg" onclick="setFonte('muitogrande')" id="fb-muitogrande" title="Texto muito grande">A</button>
+        </div>
+
+        <!-- SELETOR DE TEMA -->
+        <div class="theme-selector" title="Tema de cores">
+          <button class="theme-btn ativo" onclick="setTema('dark')"   id="tb-dark"   title="Tema escuro">🌙</button>
+          <button class="theme-btn" onclick="setTema('light')"        id="tb-light"  title="Tema claro">☀️</button>
+          <button class="theme-btn" onclick="setTema('matrix')"       id="tb-matrix" title="Tema Matrix">💚</button>
+        </div>
+
+        <!-- SAIR -->
+        <button class="btn btn-ghost btn-sm" onclick="logout()" style="display:flex;align-items:center;gap:6px;">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           <span class="sidebar-label">Sair</span>
         </button>
       </div>
     </header>
 
-    <!-- ═══ SEÇÃO: BUSCA ═══ -->
+    <!-- ════ BUSCA ════════════════════════════════════════ -->
     <section id="section-busca" class="page-content fade-in">
-      <!-- Stats -->
-      <div class="stats-grid" id="stats-grid">
-        <div class="stat-card">
-          <div class="stat-icon blue">
-            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-          </div>
-          <div class="stat-label">Fornecedores</div>
-          <div class="stat-value" id="stat-fornecedores">—</div>
+
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-icon-box blue">🏢</div>
+          <div><div class="stat-num" id="stat-fornecedores">—</div><div class="stat-lbl">Fornecedores ativos</div></div>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon purple">
-            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-            </svg>
-          </div>
-          <div class="stat-label">Catálogos</div>
-          <div class="stat-value" id="stat-catalogos">—</div>
+        <div class="stat-box">
+          <div class="stat-icon-box purple">📄</div>
+          <div><div class="stat-num" id="stat-catalogos">—</div><div class="stat-lbl">Catálogos indexados</div></div>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon green">
-            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-            </svg>
-          </div>
-          <div class="stat-label">Trechos indexados</div>
-          <div class="stat-value" id="stat-chunks">—</div>
+        <div class="stat-box">
+          <div class="stat-icon-box green">🔍</div>
+          <div><div class="stat-num" id="stat-chunks">—</div><div class="stat-lbl">Trechos pesquisáveis</div></div>
         </div>
       </div>
 
-      <!-- Barra de busca -->
-      <div class="card mb-6">
-        <div class="search-bar">
-          <div class="search-input-wrap">
-            <svg class="search-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            </svg>
-            <input class="search-input" type="text" id="campo-busca"
-              placeholder="Buscar produto, material, serviço... ex: 'papel A4', 'EPI', 'cimento'"
-              autocomplete="off">
+      <div class="busca-wrap">
+        <div class="busca-hint">
+          <span>Exemplos de busca:</span>
+          <span class="hint-tag" onclick="usarHint(this)">cabo PP 3x2,5mm</span>
+          <span class="hint-tag" onclick="usarHint(this)">EPI classe 2</span>
+          <span class="hint-tag" onclick="usarHint(this)">ABNT NBR 6148</span>
+          <span class="hint-tag" onclick="usarHint(this)">cimento CP-III</span>
+          <span class="hint-tag" onclick="usarHint(this)">fotovoltaico 750V</span>
+        </div>
+        <div class="busca-row">
+          <div class="busca-input-wrap">
+            <svg class="busca-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" id="campo-busca" placeholder="Busque por produto, código, especificação técnica, norma ABNT..." autocomplete="off">
           </div>
-          <button class="btn btn-secondary" onclick="buscar()" id="btn-buscar">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            </svg>
+          <button class="btn-buscar-main" onclick="buscar()" id="btn-buscar">
+            <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             Buscar
           </button>
-          <button class="btn btn-primary" onclick="perguntarIA()" id="btn-ia">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
-              <path d="M12 8v4l3 3"/>
-            </svg>
-            Perguntar à IA
+          <button class="btn-ia-main" onclick="perguntarIA()" id="btn-ia">
+            ✦ Perguntar à IA
           </button>
         </div>
       </div>
 
-      <!-- Resposta IA -->
-      <div id="ia-resposta" style="display:none;margin-bottom:20px;" class="fade-in">
-        <div class="ia-box">
+      <div id="ia-resposta" style="display:none;" class="fade-in">
+        <div class="ia-card">
           <div class="ia-header">
-            <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-            </svg>
-            Resposta da IA
+            <div class="ia-dot"></div>
+            <span class="ia-label-text">Resposta da Inteligência Artificial</span>
           </div>
-          <div class="ia-text" id="ia-texto">—</div>
-          <div id="ia-fontes" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;"></div>
+          <div class="ia-texto" id="ia-texto">—</div>
+          <div class="ia-fontes-row" id="ia-fontes" style="display:none;"></div>
         </div>
       </div>
 
-      <!-- Resultados -->
       <div id="busca-resultados">
-        <div class="empty-state">
-          <div class="empty-icon">🔍</div>
-          <div class="empty-title">Pronto para buscar</div>
-          <div class="empty-desc">Digite um produto ou serviço para encontrar nos catálogos dos seus fornecedores</div>
+        <div class="empty-box">
+          <div class="ei">🔍</div>
+          <div class="eh">Pronto para buscar</div>
+          <div class="ep">Digite um produto, código ou especificação técnica para encontrar nos catálogos dos seus fornecedores</div>
         </div>
       </div>
     </section>
 
-    <!-- ═══ SEÇÃO: FORNECEDORES ═══ -->
+    <!-- ════ FORNECEDORES ════════════════════════════════ -->
     <section id="section-fornecedores" class="page-content fade-in" style="display:none;">
-      <div class="flex justify-between items-center mb-6">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
         <div>
-          <h2 style="font-size:1.2rem;margin-bottom:2px;">Fornecedores</h2>
-          <p style="font-size:0.85rem;">Gerencie seus fornecedores e catálogos</p>
+          <h2 style="font-size:1.15rem;font-weight:700;color:var(--text);margin-bottom:3px;">Fornecedores</h2>
+          <p style="font-size:0.83rem;color:var(--text2);">Gerencie seus fornecedores e catálogos de produtos</p>
         </div>
-        <button class="btn btn-primary" onclick="openModal('modal-fornecedor')">
-          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
+        <button class="btn btn-primary" onclick="abrirModalNovo()" style="display:flex;align-items:center;gap:8px;">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Novo fornecedor
         </button>
       </div>
 
-      <!-- Filtro -->
-      <div class="card card-sm mb-4">
-        <div class="search-input-wrap">
-          <svg class="search-icon" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          </svg>
-          <input class="search-input" type="text" id="filtro-fornecedores"
-            placeholder="Filtrar por nome, email ou telefone..."
-            oninput="filtrarFornecedores(this.value)"
-            style="padding-left:40px;">
-        </div>
+      <div style="position:relative;margin-bottom:16px;">
+        <svg style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text3);pointer-events:none;" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input class="input" type="text" id="filtro-fornecedores" placeholder="Filtrar por nome, email ou telefone..." oninput="filtrarFornecedores(this.value)" style="padding-left:44px;font-size:0.9rem;">
       </div>
 
-      <!-- Tabela -->
-      <div class="table-wrap" id="tabela-wrap">
-        <div class="empty-state"><div class="spinner spinner-lg" style="margin:0 auto;"></div></div>
+      <div id="tabela-wrap">
+        <div class="empty-box"><div class="spinner spinner-lg" style="margin:0 auto;"></div></div>
       </div>
     </section>
 
-    <!-- ═══ SEÇÃO: DETALHE DO FORNECEDOR ═══ -->
+    <!-- ════ DETALHE ═════════════════════════════════════ -->
     <section id="section-detalhe" class="page-content fade-in" style="display:none;">
-      <div class="flex items-center gap-3 mb-6">
-        <button class="btn btn-ghost btn-sm" onclick="showSection('fornecedores')">
-          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+        <button class="btn btn-ghost btn-sm" onclick="showSection('fornecedores')" style="display:flex;align-items:center;gap:5px;">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
           Voltar
         </button>
-        <h2 style="font-size:1.2rem;" id="detalhe-nome">—</h2>
+        <h2 style="font-size:1.1rem;font-weight:700;color:var(--text);" id="detalhe-nome">—</h2>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" id="detalhe-grid">
-        <!-- Contatos -->
+      <div id="detalhe-header-card"></div>
+
+      <div class="detalhe-cols">
         <div class="card">
-          <div class="card-header">
-            <span class="card-title">Contatos</span>
-            <button class="btn btn-ghost btn-sm btn-icon" onclick="editarFornecedorAtual()" title="Editar">
-              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-            </button>
+          <div class="card-header"><span class="card-title">Adicionar catálogo</span></div>
+          <div class="upload-area" id="upload-zone" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+            <input type="file" id="input-pdf" accept=".pdf" style="display:none;" onchange="uploadPDF(this.files[0])">
+            <div class="upload-emoji">📄</div>
+            <div class="upload-titulo">Arraste o PDF aqui</div>
+            <div class="upload-sub">ou <a href="javascript:void(0)" onclick="document.getElementById('input-pdf').click()">clique para selecionar</a> · Máx. 50MB</div>
+            <div class="prog-bar" id="upload-progress"><div class="prog-fill" id="progress-fill"></div></div>
+            <div id="upload-status" style="display:none;font-size:0.8rem;color:var(--text2);margin-top:8px;"></div>
           </div>
-          <div id="detalhe-contatos">—</div>
+          <div class="upload-dica">
+            <strong>💡 Dica:</strong> Use o Prompt Mestre para extrair o catálogo em outra IA → cole no Word → salve como PDF → anexe aqui para indexação automática.
+          </div>
         </div>
 
-        <!-- Upload catálogo -->
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Adicionar catálogo</span>
+            <span class="card-title">Catálogos</span>
+            <span class="badge badge-gray" id="badge-catalogos">0</span>
           </div>
-          <div class="upload-zone" id="upload-zone" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
-            <input type="file" id="input-pdf" accept=".pdf" style="display:none;" onchange="uploadPDF(this.files[0])">
-            <div class="upload-icon">📄</div>
-            <div class="upload-text">Arraste um PDF aqui ou <a href="javascript:void(0)" onclick="document.getElementById('input-pdf').click()">clique para selecionar</a></div>
-            <div class="upload-hint">Máximo 50MB · Apenas PDF</div>
-            <div id="upload-progress" style="display:none;margin-top:12px;">
-              <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
-              <div style="font-size:0.78rem;color:var(--text2);margin-top:6px;text-align:center;" id="upload-status">Enviando...</div>
+          <div id="lista-catalogos">
+            <div class="empty-box" style="padding:32px 16px;">
+              <div class="ei" style="font-size:2.5rem;">📂</div>
+              <div class="ep">Nenhum catálogo ainda</div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Catálogos -->
-      <div class="card" style="margin-top:20px;">
+      <div class="card" id="card-produtos" style="display:none;">
         <div class="card-header">
-          <span class="card-title">Catálogos</span>
-          <span class="badge badge-gray" id="badge-catalogos">0</span>
+          <span class="card-title">Produtos indexados do catálogo</span>
+          <span class="badge badge-green" id="badge-produtos">—</span>
         </div>
-        <div id="lista-catalogos">
-          <div class="empty-state"><div class="empty-icon">📂</div><div class="empty-desc">Nenhum catálogo ainda. Faça upload de um PDF.</div></div>
-        </div>
+        <div id="tabela-produtos"></div>
       </div>
     </section>
 
-    <!-- ═══ SEÇÃO: CONFIGURAÇÕES ═══ -->
+    <!-- ════ CONFIG ══════════════════════════════════════ -->
     <section id="section-config" class="page-content fade-in" style="display:none;">
-      <h2 style="font-size:1.2rem;margin-bottom:24px;">Configurações</h2>
+      <h2 style="font-size:1.15rem;font-weight:700;color:var(--text);margin-bottom:20px;">Configurações</h2>
+      <div class="config-grid">
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;">
-
-        <!-- Conta -->
         <div class="card">
           <div class="card-header"><span class="card-title">Minha conta</span></div>
           <div style="display:flex;flex-direction:column;gap:14px;">
             <div class="form-group">
               <label class="form-label">Nome</label>
-              <input class="input" type="text" id="cfg-nome" placeholder="Seu nome">
+              <input class="input" type="text" id="cfg-nome" style="font-size:0.9rem;">
             </div>
             <div class="form-group">
               <label class="form-label">Email</label>
-              <input class="input" type="email" id="cfg-email" disabled style="opacity:0.5;cursor:not-allowed;">
+              <input class="input" type="email" id="cfg-email" disabled style="opacity:0.5;font-size:0.9rem;">
             </div>
             <div style="border-top:1px solid var(--border);padding-top:14px;">
-              <div style="font-size:0.8rem;font-weight:600;color:var(--text2);margin-bottom:10px;">Alterar senha</div>
-              <div class="form-group">
-                <input class="input" type="password" id="cfg-senha-atual" placeholder="Senha atual">
-              </div>
-              <div class="form-group" style="margin-top:8px;">
-                <input class="input" type="password" id="cfg-senha-nova" placeholder="Nova senha">
-              </div>
+              <div style="font-size:0.82rem;font-weight:600;color:var(--text2);margin-bottom:10px;">Alterar senha</div>
+              <div class="form-group"><input class="input" type="password" id="cfg-senha-atual" placeholder="Senha atual" style="font-size:0.9rem;"></div>
+              <div class="form-group" style="margin-top:8px;"><input class="input" type="password" id="cfg-senha-nova" placeholder="Nova senha" style="font-size:0.9rem;"></div>
             </div>
             <button class="btn btn-primary" onclick="salvarPerfil()">Salvar alterações</button>
           </div>
         </div>
 
-        <!-- Plano -->
         <div class="card">
           <div class="card-header"><span class="card-title">Seu plano</span></div>
           <div style="display:flex;flex-direction:column;gap:14px;">
-            <div style="padding:16px;background:var(--surface2);border-radius:var(--r);text-align:center;">
-              <div style="font-size:0.75rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Plano atual</div>
-              <div class="stat-value" id="cfg-plano" style="font-size:1.4rem;">—</div>
-              <div style="font-size:0.82rem;color:var(--accent);margin-top:4px;" id="cfg-dias">—</div>
+            <div class="plano-box">
+              <div class="plano-label">Plano atual</div>
+              <div class="plano-nome" id="cfg-plano">—</div>
+              <div class="plano-dias" id="cfg-dias">—</div>
             </div>
-
             <div style="border-top:1px solid var(--border);padding-top:14px;">
-              <div style="font-size:0.8rem;font-weight:600;color:var(--text2);margin-bottom:10px;">Ativar plano pago</div>
-              <div style="font-size:0.78rem;color:var(--text3);margin-bottom:10px;">Após pagar no PagSeguro, informe seu email e plano para ativar:</div>
-              <div class="form-group">
-                <input class="input" type="email" id="ativar-email" placeholder="Seu email de cadastro">
-              </div>
+              <div style="font-size:0.82rem;font-weight:600;color:var(--text2);margin-bottom:10px;">Ativar plano pago</div>
+              <div class="form-group"><input class="input" type="email" id="ativar-email" placeholder="Seu email de cadastro" style="font-size:0.9rem;"></div>
               <div class="form-group" style="margin-top:8px;">
-                <select class="input select" id="ativar-plano">
+                <select class="input select" id="ativar-plano" style="font-size:0.9rem;">
                   <option value="">Selecione o plano</option>
                   <option value="mensal">Mensal — R$ 97/mês</option>
                   <option value="trimestral">Trimestral — R$ 77/mês</option>
                   <option value="anual">Anual — R$ 57/mês</option>
                 </select>
               </div>
-              <button class="btn btn-primary" style="margin-top:8px;" onclick="ativarPlano()">Ativar plano</button>
-              <div style="margin-top:8px;">
-                <a href="planos.html" target="_blank" class="btn btn-ghost btn-sm btn-full">Ver todos os planos →</a>
-              </div>
+              <button class="btn btn-primary" style="margin-top:10px;" onclick="ativarPlano()">Ativar plano</button>
+              <a href="planos.html" target="_blank" class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;margin-top:8px;display:flex;">Ver todos os planos →</a>
             </div>
           </div>
         </div>
 
-        <!-- Tema -->
         <div class="card">
           <div class="card-header"><span class="card-title">Aparência</span></div>
-          <div style="display:flex;flex-direction:column;gap:10px;">
-            <div style="font-size:0.8rem;color:var(--text2);margin-bottom:4px;">Tema da interface</div>
-            <button class="btn btn-secondary" onclick="aplicarTema('dark')" id="btn-tema-dark">
-              🌙 Dark (padrão)
-            </button>
-            <button class="btn btn-secondary" onclick="aplicarTema('light')" id="btn-tema-light">
-              ☀️ Light
-            </button>
-            <button class="btn btn-secondary" onclick="aplicarTema('matrix')" id="btn-tema-matrix">
-              💚 Matrix
-            </button>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div style="font-size:0.82rem;font-weight:600;color:var(--text2);">Tema de cores</div>
+            <button class="btn btn-secondary" onclick="setTema('dark')" style="justify-content:flex-start;gap:10px;font-size:0.9rem;">🌙 Dark <span style="color:var(--text3);font-size:0.78rem;">(padrão)</span></button>
+            <button class="btn btn-secondary" onclick="setTema('light')" style="justify-content:flex-start;gap:10px;font-size:0.9rem;">☀️ Light</button>
+            <button class="btn btn-secondary" onclick="setTema('matrix')" style="justify-content:flex-start;gap:10px;font-size:0.9rem;">💚 Matrix</button>
+            <div style="font-size:0.82rem;font-weight:600;color:var(--text2);margin-top:8px;">Tamanho do texto</div>
+            <button class="btn btn-secondary" onclick="setFonte('pequeno')" style="justify-content:flex-start;gap:10px;font-size:0.82rem;">A — Pequeno</button>
+            <button class="btn btn-secondary" onclick="setFonte('padrao')" style="justify-content:flex-start;gap:10px;font-size:0.9rem;">A — Padrão</button>
+            <button class="btn btn-secondary" onclick="setFonte('grande')" style="justify-content:flex-start;gap:10px;font-size:1rem;">A — Grande</button>
+            <button class="btn btn-secondary" onclick="setFonte('muitogrande')" style="justify-content:flex-start;gap:10px;font-size:1.15rem;">A — Muito grande</button>
           </div>
         </div>
 
@@ -349,22 +840,18 @@
   </main>
 </div>
 
-<!-- ═══════════ MODAL: FORNECEDOR ═══════════ -->
+<!-- MODAL NOVO/EDITAR FORNECEDOR -->
 <div class="modal-overlay" id="modal-fornecedor">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title" id="modal-fornecedor-titulo">Novo fornecedor</span>
-      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-fornecedor')">
-        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
+      <span class="modal-title" id="modal-titulo">Novo fornecedor</span>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-fornecedor')">✕</button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="forn-id">
       <div class="form-group">
-        <label class="form-label">Nome *</label>
-        <input class="input" type="text" id="forn-nome" placeholder="Nome do fornecedor" required>
+        <label class="form-label">Nome do fornecedor *</label>
+        <input class="input" type="text" id="forn-nome" placeholder="Ex: Flex Fast Fios Elétricos" style="font-size:0.95rem;">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="form-group">
@@ -378,270 +865,249 @@
       </div>
       <div class="form-group">
         <label class="form-label">Email</label>
-        <input class="input" type="email" id="forn-email" placeholder="contato@fornecedor.com">
+        <input class="input" type="email" id="forn-email" placeholder="contato@fornecedor.com.br">
       </div>
       <div class="form-group">
-        <label class="form-label">Observações</label>
-        <textarea class="textarea" id="forn-obs" placeholder="Especialidades, condições, notas..."></textarea>
+        <label class="form-label">Especialidade / Observações</label>
+        <textarea class="textarea" id="forn-obs" placeholder="Ex: Fios e cabos elétricos industriais, materiais para licitação pública..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catálogo PDF <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
+        <input type="file" id="forn-pdf" accept=".pdf" class="input" style="padding:9px;cursor:pointer;">
+        <div class="form-hint" style="margin-top:5px;">PDF gerado com o Prompt Mestre será indexado automaticamente após salvar</div>
       </div>
     </div>
-      <div class="form-group" style="padding:0 24px 0;">
-              <label class="form-label">Catálogo PDF <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
-              <input type="file" id="forn-pdf" accept=".pdf,image/jpeg,image/png,image/webp" class="input" style="padding:8px;cursor:pointer;">
-              <div class="form-hint">PDF ou imagem — será indexado automaticamente pela IA</div>
-            </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-fornecedor')">Cancelar</button>
-      <button class="btn btn-primary" onclick="salvarFornecedor()" id="btn-salvar-forn">Salvar</button>
+      <button class="btn btn-primary" onclick="salvarFornecedor()" id="btn-salvar-forn">Salvar fornecedor</button>
     </div>
   </div>
 </div>
 
-<!-- ═══════════ MODAL: CONFIRMAR EXCLUSÃO ═══════════ -->
+<!-- MODAL CONFIRMAR EXCLUSÃO -->
 <div class="modal-overlay" id="modal-excluir">
-  <div class="modal" style="max-width:400px;">
+  <div class="modal" style="max-width:420px;">
     <div class="modal-header">
       <span class="modal-title">Confirmar exclusão</span>
-      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-excluir')">
-        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
+      <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-excluir')">✕</button>
     </div>
     <div class="modal-body">
-      <p>Tem certeza que deseja excluir <strong id="excluir-nome">este fornecedor</strong>? Esta ação não pode ser desfeita.</p>
+      <p style="color:var(--text2);line-height:1.7;font-size:0.95rem;">Tem certeza que deseja excluir <strong id="excluir-nome" style="color:var(--text);"></strong>? Todos os catálogos e dados de busca serão removidos permanentemente.</p>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-excluir')">Cancelar</button>
-      <button class="btn btn-danger" onclick="confirmarExclusao()" id="btn-confirmar-excluir">Excluir</button>
+      <button class="btn btn-danger" onclick="confirmarExclusao()" id="btn-confirmar-excluir">Excluir permanentemente</button>
     </div>
   </div>
 </div>
 
-<!-- Toast container -->
 <div class="toast-container" id="toast-container"></div>
+<div id="mobile-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99;backdrop-filter:blur(2px);" onclick="closeMobileSidebar()"></div>
 
-<!-- Mobile overlay -->
-<div id="mobile-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99;" onclick="closeMobileSidebar()"></div>
-
-<script src="js/utils.js?v=3"></script>
+<script src="js/utils.js?v=5"></script>
 <script>
-// ═══════════════════════════════════════════════════════════
-// LicitaFácil App — JS principal
-// Sem template literals aninhados, sem aspas especiais
-// ═══════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
+// LICITAFÁCIL — APP PRINCIPAL v3.0
+// ════════════════════════════════════════════════════════
 
 var USUARIO = null;
 var FORNECEDORES = [];
 var FORNECEDOR_ATIVO = null;
 var EXCLUIR_ID = null;
 var SIDEBAR_COLLAPSED = false;
-var debounceTimer = null;
 
-// ─── Init ─────────────────────────────────────────────────
-
-requireLogin(function(usuario) {
-  USUARIO = usuario;
+// ── INIT ─────────────────────────────────────────────────
+requireLogin(function(u) {
+  USUARIO = u;
   renderUsuario();
   carregarStats();
   carregarFornecedores();
+  iniciarControles();
+});
 
-  // Enter na busca
+function iniciarControles() {
   document.getElementById('campo-busca').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') buscar();
   });
-});
+  // Restaurar tamanho de fonte salvo
+  var fs = localStorage.getItem('lf_fonte') || 'padrao';
+  aplicarFonte(fs);
+}
 
-// ─── Usuário ──────────────────────────────────────────────
+// ── TEMA E FONTE ─────────────────────────────────────────
+function setTema(tema) {
+  document.documentElement.setAttribute('data-theme', tema);
+  localStorage.setItem('tema', tema);
+  ['dark','light','matrix'].forEach(function(t) {
+    var btn = document.getElementById('tb-' + t);
+    if (btn) btn.classList.toggle('ativo', t === tema);
+  });
+}
 
+function setFonte(tamanho) {
+  aplicarFonte(tamanho);
+  localStorage.setItem('lf_fonte', tamanho);
+}
+
+function aplicarFonte(tamanho) {
+  document.documentElement.setAttribute('data-font-size', tamanho);
+  ['pequeno','padrao','grande','muitogrande'].forEach(function(t) {
+    var btn = document.getElementById('fb-' + t);
+    if (btn) btn.classList.toggle('ativo', t === tamanho);
+  });
+}
+
+function usarHint(el) {
+  var campo = document.getElementById('campo-busca');
+  campo.value = el.textContent;
+  campo.focus();
+  buscar();
+}
+
+// ── USUARIO ──────────────────────────────────────────────
 function renderUsuario() {
   if (!USUARIO) return;
   document.getElementById('user-nome').textContent = USUARIO.nome;
   document.getElementById('user-avatar').textContent = USUARIO.nome.charAt(0).toUpperCase();
-
-  var planoLabel = USUARIO.plano === 'trial'
-    ? ('Trial · ' + (USUARIO.dias_restantes || 0) + 'd')
-    : USUARIO.plano;
-  document.getElementById('user-plano').textContent = planoLabel;
-
-  // Config
+  var pl = USUARIO.plano === 'trial' ? ('Trial · ' + (USUARIO.dias_restantes || 0) + 'd') : capitalize(USUARIO.plano);
+  document.getElementById('user-plano').textContent = pl;
   document.getElementById('cfg-nome').value = USUARIO.nome;
   document.getElementById('cfg-email').value = USUARIO.email;
   document.getElementById('ativar-email').value = USUARIO.email;
-
-  var planoNome = USUARIO.plano === 'trial' ? 'Trial (gratuito)' : capitalize(USUARIO.plano);
-  document.getElementById('cfg-plano').textContent = planoNome;
-  var diasText = USUARIO.dias_restantes != null
-    ? (USUARIO.dias_restantes + ' dias restantes')
-    : 'Ativo';
-  document.getElementById('cfg-dias').textContent = diasText;
+  document.getElementById('cfg-plano').textContent = USUARIO.plano === 'trial' ? 'Trial (gratuito)' : capitalize(USUARIO.plano);
+  document.getElementById('cfg-dias').textContent = USUARIO.dias_restantes != null ? (USUARIO.dias_restantes + ' dias restantes') : 'Ativo';
+  // Restaurar tema
+  var tema = localStorage.getItem('tema') || 'dark';
+  setTema(tema);
 }
+function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 
-function capitalize(s) {
-  if (!s) return '';
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-// ─── Navegação ─────────────────────────────────────────────
-
-var titles = {
-  'busca': 'Busca Inteligente',
-  'fornecedores': 'Fornecedores',
-  'detalhe': 'Detalhe do Fornecedor',
-  'config': 'Configurações'
-};
+// ── NAVEGAÇÃO ─────────────────────────────────────────────
+var TITULOS = { busca: 'Busca Inteligente', fornecedores: 'Fornecedores', detalhe: 'Detalhe do Fornecedor', config: 'Configurações' };
 
 function showSection(nome) {
-  var sections = ['busca', 'fornecedores', 'detalhe', 'config'];
-  sections.forEach(function(s) {
+  ['busca','fornecedores','detalhe','config'].forEach(function(s) {
     var el = document.getElementById('section-' + s);
     if (el) el.style.display = s === nome ? 'block' : 'none';
   });
-
-  ['busca', 'fornecedores', 'config'].forEach(function(n) {
+  ['busca','fornecedores','config'].forEach(function(n) {
     var nav = document.getElementById('nav-' + n);
-    if (nav) {
-      nav.classList.toggle('active', n === nome || (nome === 'detalhe' && n === 'fornecedores'));
-    }
+    if (nav) nav.classList.toggle('active', n === nome || (nome === 'detalhe' && n === 'fornecedores'));
   });
-
-  document.getElementById('topbar-title').textContent = titles[nome] || '';
-
+  document.getElementById('topbar-title').textContent = TITULOS[nome] || '';
   if (nome === 'fornecedores') carregarFornecedores();
   if (nome === 'busca') carregarStats();
-
-  // Mobile: fechar sidebar ao navegar
   closeMobileSidebar();
 }
 
-// ─── Sidebar ──────────────────────────────────────────────
-
 function toggleSidebar() {
-  var isMobile = window.innerWidth <= 768;
-  if (isMobile) {
-    var sidebar = document.getElementById('sidebar');
-    var overlay = document.getElementById('mobile-overlay');
-    sidebar.classList.toggle('mobile-open');
-    overlay.style.display = sidebar.classList.contains('mobile-open') ? 'block' : 'none';
+  if (window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.toggle('mobile-open');
+    document.getElementById('mobile-overlay').style.display = document.getElementById('sidebar').classList.contains('mobile-open') ? 'block' : 'none';
   } else {
     SIDEBAR_COLLAPSED = !SIDEBAR_COLLAPSED;
     document.getElementById('sidebar').classList.toggle('collapsed', SIDEBAR_COLLAPSED);
     document.getElementById('main-content').classList.toggle('sidebar-collapsed', SIDEBAR_COLLAPSED);
   }
 }
-
 function closeMobileSidebar() {
   document.getElementById('sidebar').classList.remove('mobile-open');
   document.getElementById('mobile-overlay').style.display = 'none';
 }
 
-// ─── Stats ─────────────────────────────────────────────────
-
+// ── STATS ─────────────────────────────────────────────────
 function carregarStats() {
-  apiGet('/api/busca/stats').then(function(data) {
-    document.getElementById('stat-fornecedores').textContent = data.total_fornecedores;
-    document.getElementById('stat-catalogos').textContent = data.total_catalogos;
-    document.getElementById('stat-chunks').textContent = data.total_chunks;
-  }).catch(function() {});
+  apiGet('/api/busca/stats').then(function(d) {
+    document.getElementById('stat-fornecedores').textContent = d.total_fornecedores;
+    document.getElementById('stat-catalogos').textContent = d.total_catalogos;
+    document.getElementById('stat-chunks').textContent = d.total_chunks;
+  }).catch(function(){});
 }
 
-// ─── Busca ──────────────────────────────────────────────────
-
+// ── BUSCA ─────────────────────────────────────────────────
 function buscar() {
   var q = document.getElementById('campo-busca').value.trim();
   if (!q) { showToast('Digite algo para buscar', 'warning'); return; }
-
   document.getElementById('ia-resposta').style.display = 'none';
-
   var btn = document.getElementById('btn-buscar');
   setLoading(btn, true, 'Buscando...');
-
-  var html = '<div style="display:flex;align-items:center;justify-content:center;padding:40px;"><div class="spinner spinner-lg"></div></div>';
-  document.getElementById('busca-resultados').innerHTML = html;
-
+  document.getElementById('busca-resultados').innerHTML = '<div class="empty-box"><div class="spinner spinner-lg" style="margin:0 auto;"></div></div>';
   apiPost('/api/busca', { consulta: q, limite: 8 }).then(function(data) {
     setLoading(btn, false, 'Buscar');
     renderResultados(data);
   }).catch(function(err) {
     setLoading(btn, false, 'Buscar');
-    var msg = err && err.error ? err.error : 'Erro ao buscar';
-    document.getElementById('busca-resultados').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-desc">' + esc(msg) + '</div></div>';
+    document.getElementById('busca-resultados').innerHTML = '<div class="empty-box"><div class="ei">⚠️</div><div class="ep">' + esc(err && err.error ? err.error : 'Erro ao buscar') + '</div></div>';
   });
 }
 
 function renderResultados(data) {
   var el = document.getElementById('busca-resultados');
   if (!data.resultados || data.resultados.length === 0) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">😔</div><div class="empty-title">Nenhum resultado encontrado</div><div class="empty-desc">Tente palavras diferentes ou adicione mais catálogos de fornecedores.</div></div>';
+    el.innerHTML = '<div class="empty-box"><div class="ei">😔</div><div class="eh">Nenhum resultado encontrado</div><div class="ep">Tente palavras diferentes ou adicione mais catálogos de fornecedores.</div></div>';
     return;
   }
-
-  var html = '<div style="display:flex;flex-direction:column;gap:12px;">';
+  var html = '';
   data.resultados.forEach(function(r) {
-    var relevColor = r.relevancia === 'alta' ? 'badge-green' : r.relevancia === 'media' ? 'badge-yellow' : 'badge-gray';
+    var relClass = r.relevancia === 'alta' ? 'rel-alta' : r.relevancia === 'media' ? 'rel-media' : 'rel-baixa';
+    var relLabel = r.relevancia === 'alta' ? '✓ Alta relevância' : r.relevancia === 'media' ? '~ Média relevância' : '↓ Baixa relevância';
     var contatos = '';
-    if (r.telefone) contatos += '<span class="contact-chip">📞 ' + esc(formatPhone(r.telefone)) + '</span>';
-    if (r.whatsapp) contatos += '<a href="https://wa.me/55' + esc(r.whatsapp.replace(/\D/g,'')) + '" target="_blank" class="contact-chip" style="color:var(--accent3);">💬 WhatsApp</a>';
-    if (r.email) contatos += '<span class="contact-chip">✉ ' + esc(r.email) + '</span>';
+    if (r.telefone) contatos += '<span class="contato-chip">📞 ' + esc(formatPhone(r.telefone)) + '</span>';
+    if (r.whatsapp) contatos += '<a href="https://wa.me/55' + esc(r.whatsapp.replace(/\D/g,'')) + '" target="_blank" class="contato-chip wpp" onclick="event.stopPropagation()">💬 WhatsApp</a>';
+    if (r.email) contatos += '<a href="mailto:' + esc(r.email) + '" class="contato-chip" onclick="event.stopPropagation()">✉ ' + esc(r.email) + '</a>';
+    contatos += '<span class="contato-chip ver" onclick="event.stopPropagation();verFornecedor(' + r.fornecedor_id + ')">Ver catálogo →</span>';
 
-    html += '<div class="result-card" onclick="verFornecedor(' + r.fornecedor_id + ')">';
-    html += '<div class="result-header">';
-    html += '<div class="result-name">' + esc(r.nome) + '</div>';
-    html += '<div><span class="badge ' + relevColor + '">' + r.score + '% relevante</span></div>';
+    html += '<div class="resultado-card" onclick="verFornecedor(' + r.fornecedor_id + ')">';
+    html += '<div class="resultado-top">';
+    html += '<div><div class="resultado-nome">' + esc(r.nome) + '</div>';
+    if (r.nome_arquivo) html += '<div class="resultado-especialidade">📄 ' + esc(r.nome_arquivo) + '</div>';
     html += '</div>';
-    if (r.trecho) html += '<div class="result-trecho">' + esc(r.trecho) + '</div>';
-    if (contatos) html += '<div class="result-contacts">' + contatos + '</div>';
+    html += '<div class="relevancia-badge"><span class="rel-pill ' + relClass + '">' + relLabel + '</span><span class="rel-score">' + r.score + '% de correspondência</span></div>';
+    html += '</div>';
+    if (r.trecho) html += '<div class="trecho-box">' + esc(r.trecho) + '</div>';
+    html += '<div class="contatos-row">' + contatos + '</div>';
     html += '</div>';
   });
-  html += '</div>';
   el.innerHTML = html;
 }
 
 function perguntarIA() {
   var q = document.getElementById('campo-busca').value.trim();
-  if (!q) { showToast('Digite uma pergunta para a IA', 'warning'); return; }
-
+  if (!q) { showToast('Digite uma pergunta', 'warning'); return; }
   var btn = document.getElementById('btn-ia');
   var iaBox = document.getElementById('ia-resposta');
   var iaTexto = document.getElementById('ia-texto');
   var iaFontes = document.getElementById('ia-fontes');
-
-  setLoading(btn, true, 'Processando...');
+  setLoading(btn, true, 'Consultando IA...');
   iaBox.style.display = 'block';
-  iaTexto.textContent = 'A IA está analisando os catálogos...';
-  iaFontes.innerHTML = '';
-
+  iaTexto.textContent = 'Analisando os catálogos dos seus fornecedores...';
+  iaFontes.style.display = 'none';
   apiPost('/api/busca/responder', { consulta: q }).then(function(data) {
-    setLoading(btn, false, 'Perguntar à IA');
+    setLoading(btn, false, '✦ Perguntar à IA');
     iaTexto.textContent = data.resposta;
-
     if (data.fontes && data.fontes.length > 0) {
-      var fhtml = '<div style="font-size:0.75rem;color:var(--text3);margin-bottom:6px;">Fontes consultadas:</div>';
+      var fhtml = '<span style="font-size:0.75rem;color:var(--text3);font-weight:600;">Fontes consultadas:</span>';
       data.fontes.forEach(function(f) {
         fhtml += '<span class="badge badge-blue" style="cursor:pointer;" onclick="verFornecedor(' + f.fornecedor_id + ')">' + esc(f.nome) + '</span>';
       });
       iaFontes.innerHTML = fhtml;
+      iaFontes.style.display = 'flex';
     }
   }).catch(function(err) {
-    setLoading(btn, false, 'Perguntar à IA');
+    setLoading(btn, false, '✦ Perguntar à IA');
     iaTexto.textContent = err && err.error ? err.error : 'Erro ao consultar a IA.';
   });
 }
 
-// ─── Fornecedores ──────────────────────────────────────────
-
+// ── FORNECEDORES ──────────────────────────────────────────
 function carregarFornecedores(filtro) {
-  var path = '/api/fornecedores';
-  if (filtro) path += '?busca=' + encodeURIComponent(filtro);
-
-  var wrap = document.getElementById('tabela-wrap');
-  wrap.innerHTML = '<div class="empty-state"><div class="spinner spinner-lg" style="margin:0 auto;"></div></div>';
-
+  var path = '/api/fornecedores' + (filtro ? '?busca=' + encodeURIComponent(filtro) : '');
+  document.getElementById('tabela-wrap').innerHTML = '<div class="empty-box"><div class="spinner spinner-lg" style="margin:0 auto;"></div></div>';
   apiGet(path).then(function(data) {
     FORNECEDORES = data.fornecedores || [];
     renderTabela();
   }).catch(function() {
-    wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-desc">Erro ao carregar fornecedores.</div></div>';
+    document.getElementById('tabela-wrap').innerHTML = '<div class="empty-box"><div class="ei">⚠️</div><div class="ep">Erro ao carregar fornecedores.</div></div>';
   });
 }
 
@@ -649,122 +1115,99 @@ var filtrarFornecedores = debounce(function(v) { carregarFornecedores(v); }, 400
 
 function renderTabela() {
   var wrap = document.getElementById('tabela-wrap');
-  if (FORNECEDORES.length === 0) {
-    wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">🏢</div><div class="empty-title">Nenhum fornecedor cadastrado</div><div class="empty-desc">Clique em "Novo fornecedor" para começar.</div></div>';
+  if (!FORNECEDORES.length) {
+    wrap.innerHTML = '<div class="empty-box"><div class="ei">🏢</div><div class="eh">Nenhum fornecedor ainda</div><div class="ep">Clique em "Novo fornecedor" para começar a cadastrar.</div></div>';
     return;
   }
-
-  var html = '<table>';
-  html += '<thead><tr><th>Fornecedor</th><th>Contato</th><th>Catálogos</th><th>Trechos</th><th style="text-align:right;">Ações</th></tr></thead>';
-  html += '<tbody>';
-
+  var html = '<div class="table-wrap"><table><thead><tr>';
+  html += '<th>Fornecedor</th><th>Contato</th><th style="text-align:center;">Catálogos</th><th style="text-align:center;">Trechos</th><th style="text-align:right;">Ações</th>';
+  html += '</tr></thead><tbody>';
   FORNECEDORES.forEach(function(f) {
     html += '<tr>';
-    html += '<td>';
-    html += '<div style="font-weight:600;color:var(--text);">' + esc(f.nome) + '</div>';
-    if (f.observacoes) html += '<div style="font-size:0.78rem;color:var(--text3);">' + esc(truncate(f.observacoes, 50)) + '</div>';
+    html += '<td><div class="cell-nome">' + esc(f.nome) + '</div>';
+    if (f.observacoes) html += '<div class="cell-obs">' + esc(truncate(f.observacoes, 60)) + '</div>';
     html += '</td>';
-    html += '<td>';
-    if (f.telefone) html += '<div style="font-size:0.82rem;color:var(--text2);">📞 ' + esc(formatPhone(f.telefone)) + '</div>';
-    if (f.email) html += '<div style="font-size:0.82rem;color:var(--text2);">✉ ' + esc(f.email) + '</div>';
-    html += '</td>';
-    html += '<td><span class="badge ' + (f.total_catalogos > 0 ? 'badge-blue' : 'badge-gray') + '">' + f.total_catalogos + '</span></td>';
-    html += '<td><span class="badge ' + (f.total_chunks > 0 ? 'badge-green' : 'badge-gray') + '">' + f.total_chunks + '</span></td>';
-    html += '<td style="text-align:right;">';
-    html += '<div style="display:flex;gap:6px;justify-content:flex-end;">';
-    html += '<button class="btn btn-ghost btn-sm" data-id="' + f.id + '" onclick="verFornecedor(' + f.id + ')">Ver</button>';
-    html += '<button class="btn btn-secondary btn-sm" data-id="' + f.id + '" onclick="abrirEditar(' + f.id + ')">Editar</button>';
-    html += '<button class="btn btn-danger btn-sm" data-id="' + f.id + '" onclick="pedirExcluir(' + f.id + ')">Excluir</button>';
-    html += '</div>';
-    html += '</td>';
-    html += '</tr>';
+    html += '<td><div class="cell-contato">';
+    if (f.telefone) html += '<div>📞 ' + esc(formatPhone(f.telefone)) + '</div>';
+    if (f.email) html += '<div><a href="mailto:' + esc(f.email) + '">✉ ' + esc(f.email) + '</a></div>';
+    html += '</div></td>';
+    html += '<td style="text-align:center;"><span class="badge ' + (f.total_catalogos > 0 ? 'badge-blue' : 'badge-gray') + '" style="font-size:0.8rem;">' + f.total_catalogos + '</span></td>';
+    html += '<td style="text-align:center;"><span class="badge ' + (f.total_chunks > 0 ? 'badge-green' : 'badge-gray') + '" style="font-size:0.8rem;">' + f.total_chunks + '</span></td>';
+    html += '<td style="text-align:right;"><div style="display:flex;gap:6px;justify-content:flex-end;">';
+    html += '<button class="btn btn-ghost btn-sm" onclick="verFornecedor(' + f.id + ')">Ver</button>';
+    html += '<button class="btn btn-secondary btn-sm" onclick="abrirEditar(' + f.id + ')">Editar</button>';
+    html += '<button class="btn btn-danger btn-sm" onclick="pedirExcluir(' + f.id + ')">Excluir</button>';
+    html += '</div></td></tr>';
   });
-
-  html += '</tbody></table>';
-  document.getElementById('tabela-wrap').innerHTML = html;
+  html += '</tbody></table></div>';
+  wrap.innerHTML = html;
 }
 
-// ─── Criar / editar fornecedor ────────────────────────────
+// ── MODAL FORNECEDOR ──────────────────────────────────────
+function abrirModalNovo() {
+  limparModal();
+  openModal('modal-fornecedor');
+}
 
 function abrirEditar(id) {
   var f = FORNECEDORES.find(function(x) { return x.id === id; });
-  if (!f) return;
+  if (!f) { apiGet('/api/fornecedores/' + id).then(function(forn) { preencherModal(forn); }); return; }
+  preencherModal(f);
+}
 
+function preencherModal(f) {
   document.getElementById('forn-id').value = f.id;
   document.getElementById('forn-nome').value = f.nome || '';
   document.getElementById('forn-telefone').value = f.telefone || '';
   document.getElementById('forn-whatsapp').value = f.whatsapp || '';
   document.getElementById('forn-email').value = f.email || '';
   document.getElementById('forn-obs').value = f.observacoes || '';
-  document.getElementById('modal-fornecedor-titulo').textContent = 'Editar fornecedor';
+  document.getElementById('modal-titulo').textContent = 'Editar fornecedor';
   openModal('modal-fornecedor');
 }
 
 function salvarFornecedor() {
   var id = document.getElementById('forn-id').value;
   var nome = document.getElementById('forn-nome').value.trim();
-
   if (!nome) { showToast('Nome é obrigatório', 'warning'); return; }
-
-  var body = {
-    nome: nome,
-    telefone: document.getElementById('forn-telefone').value.trim(),
-    whatsapp: document.getElementById('forn-whatsapp').value.trim(),
-    email: document.getElementById('forn-email').value.trim(),
-    observacoes: document.getElementById('forn-obs').value.trim()
-  };
-
+  var body = { nome: nome, telefone: document.getElementById('forn-telefone').value.trim(), whatsapp: document.getElementById('forn-whatsapp').value.trim(), email: document.getElementById('forn-email').value.trim(), observacoes: document.getElementById('forn-obs').value.trim() };
+  var pdfFile = document.getElementById('forn-pdf') ? document.getElementById('forn-pdf').files[0] : null;
   var btn = document.getElementById('btn-salvar-forn');
   setLoading(btn, true, 'Salvando...');
-
-  var pdfFile = document.getElementById('forn-pdf') ? document.getElementById('forn-pdf').files[0] : null;
-  var promise = id
-    ? apiPut('/api/fornecedores/' + id, body)
-    : apiPost('/api/fornecedores', body);
-
+  var promise = id ? apiPut('/api/fornecedores/' + id, body) : apiPost('/api/fornecedores', body);
   promise.then(function(data) {
-    setLoading(btn, false, 'Salvar');
+    setLoading(btn, false, 'Salvar fornecedor');
     closeModal('modal-fornecedor');
-    showToast(id ? 'Fornecedor atualizado!' : 'Fornecedor criado!', 'success');
+    showToast(id ? 'Fornecedor atualizado!' : 'Fornecedor criado com sucesso!', 'success');
     var fornId = data.fornecedor ? data.fornecedor.id : id;
-    limparModalFornecedor();
+    limparModal();
     carregarFornecedores();
     carregarStats();
-    // Upload PDF se selecionado
     if (pdfFile && fornId) {
       showToast('Enviando catálogo para indexação...', 'info');
       var fd = new FormData();
       fd.append('arquivo', pdfFile);
       apiForm('/api/extracao/catalogo/' + fornId, fd).then(function() {
-        showToast('Catálogo enviado! Indexando com IA...', 'success');
+        showToast('Catálogo enviado! Indexando em background...', 'success');
         carregarStats();
-      }).catch(function(err) {
-        showToast('Fornecedor salvo, mas erro no PDF: ' + (err && err.error ? err.error : 'erro'), 'warning');
-      });
+      }).catch(function(err) { showToast('Fornecedor salvo. Erro no PDF: ' + (err && err.error ? err.error : 'erro'), 'warning'); });
     }
-  }).catch(function(err) {
-    setLoading(btn, false, 'Salvar');
-    showToast(err && err.error ? err.error : 'Erro ao salvar', 'error');
-  });
+  }).catch(function(err) { setLoading(btn, false, 'Salvar fornecedor'); showToast(err && err.error ? err.error : 'Erro ao salvar', 'error'); });
 }
 
-function limparModalFornecedor() {
+function limparModal() {
   document.getElementById('forn-id').value = '';
   document.getElementById('forn-nome').value = '';
   document.getElementById('forn-telefone').value = '';
   document.getElementById('forn-whatsapp').value = '';
   document.getElementById('forn-email').value = '';
   document.getElementById('forn-obs').value = '';
-  document.getElementById('modal-fornecedor-titulo').textContent = 'Novo fornecedor';
+  document.getElementById('modal-titulo').textContent = 'Novo fornecedor';
+  var pdf = document.getElementById('forn-pdf');
+  if (pdf) pdf.value = '';
 }
 
-// Limpar modal ao fechar
-document.getElementById('modal-fornecedor').addEventListener('click', function(e) {
-  if (e.target === this) limparModalFornecedor();
-});
-
-// ─── Excluir ──────────────────────────────────────────────
-
+// ── EXCLUIR ───────────────────────────────────────────────
 function pedirExcluir(id) {
   var f = FORNECEDORES.find(function(x) { return x.id === id; });
   EXCLUIR_ID = id;
@@ -776,296 +1219,186 @@ function confirmarExclusao() {
   if (!EXCLUIR_ID) return;
   var btn = document.getElementById('btn-confirmar-excluir');
   setLoading(btn, true, 'Excluindo...');
-
   apiDelete('/api/fornecedores/' + EXCLUIR_ID).then(function() {
-    setLoading(btn, false, 'Excluir');
+    setLoading(btn, false, 'Excluir permanentemente');
     closeModal('modal-excluir');
-    showToast('Fornecedor excluído.', 'success');
+    showToast('Fornecedor excluído com sucesso.', 'success');
     EXCLUIR_ID = null;
     carregarFornecedores();
     carregarStats();
-  }).catch(function(err) {
-    setLoading(btn, false, 'Excluir');
-    showToast(err && err.error ? err.error : 'Erro ao excluir', 'error');
-  });
+  }).catch(function(err) { setLoading(btn, false, 'Excluir permanentemente'); showToast(err && err.error ? err.error : 'Erro ao excluir', 'error'); });
 }
 
-// ─── Detalhe do fornecedor ────────────────────────────────
-
+// ── DETALHE FORNECEDOR ────────────────────────────────────
 function verFornecedor(id) {
   showSection('detalhe');
   FORNECEDOR_ATIVO = id;
-  carregarDetalhe(id);
-}
-
-function carregarDetalhe(id) {
   document.getElementById('detalhe-nome').textContent = 'Carregando...';
-  document.getElementById('detalhe-contatos').innerHTML = '<div class="spinner" style="margin:10px auto;"></div>';
-
+  document.getElementById('detalhe-header-card').innerHTML = '';
+  document.getElementById('card-produtos').style.display = 'none';
   apiGet('/api/fornecedores/' + id).then(function(f) {
     document.getElementById('detalhe-nome').textContent = f.nome;
-
-    var html = '<div style="display:flex;flex-direction:column;gap:10px;">';
-    if (f.telefone) {
-      html += '<div class="contact-chip" style="padding:8px 12px;border-radius:var(--r);">';
-      html += '<span>📞</span><span style="font-weight:500;">Telefone:</span><span>' + esc(formatPhone(f.telefone)) + '</span>';
-      html += '</div>';
-    }
-    if (f.whatsapp) {
-      html += '<a href="' + esc(f.whatsapp_link || '') + '" target="_blank" class="contact-chip" style="padding:8px 12px;border-radius:var(--r);color:var(--accent3);">';
-      html += '<span>💬</span><span style="font-weight:500;">WhatsApp:</span><span>' + esc(formatPhone(f.whatsapp)) + '</span>';
-      html += '</a>';
-    }
-    if (f.email) {
-      html += '<a href="mailto:' + esc(f.email) + '" class="contact-chip" style="padding:8px 12px;border-radius:var(--r);">';
-      html += '<span>✉</span><span style="font-weight:500;">Email:</span><span>' + esc(f.email) + '</span>';
-      html += '</a>';
-    }
-    if (f.observacoes) {
-      html += '<div style="margin-top:4px;padding:10px 12px;background:var(--surface2);border-radius:var(--r);font-size:0.85rem;color:var(--text2);">';
-      html += esc(f.observacoes) + '</div>';
-    }
-    if (!f.telefone && !f.email && !f.whatsapp && !f.observacoes) {
-      html += '<div style="color:var(--text3);font-size:0.85rem;">Nenhum contato cadastrado.</div>';
-    }
-    html += '</div>';
-    document.getElementById('detalhe-contatos').innerHTML = html;
-
+    renderHeaderFornecedor(f);
     renderCatalogos(f.catalogos || []);
-  }).catch(function() {
-    document.getElementById('detalhe-nome').textContent = 'Erro ao carregar';
-    document.getElementById('detalhe-contatos').innerHTML = '<div class="form-error">Não foi possível carregar os detalhes.</div>';
-  });
+  }).catch(function() { document.getElementById('detalhe-nome').textContent = 'Erro ao carregar'; });
 }
 
-function editarFornecedorAtual() {
-  var f = null;
-  if (FORNECEDOR_ATIVO) {
-    f = FORNECEDORES.find(function(x) { return x.id === FORNECEDOR_ATIVO; });
-  }
-  if (f) { abrirEditar(f.id); return; }
+function renderHeaderFornecedor(f) {
+  var inicial = (f.nome || '?').charAt(0).toUpperCase();
+  var contatos = '';
+  if (f.telefone) contatos += '<span class="contato-chip">📞 ' + esc(formatPhone(f.telefone)) + '</span>';
+  if (f.whatsapp) contatos += '<a href="' + esc(f.whatsapp_link || '#') + '" target="_blank" class="contato-chip wpp">💬 ' + esc(formatPhone(f.whatsapp)) + '</a>';
+  if (f.email) contatos += '<a href="mailto:' + esc(f.email) + '" class="contato-chip">✉ ' + esc(f.email) + '</a>';
 
-  // Buscar direto na API
-  apiGet('/api/fornecedores/' + FORNECEDOR_ATIVO).then(function(forn) {
-    document.getElementById('forn-id').value = forn.id;
-    document.getElementById('forn-nome').value = forn.nome || '';
-    document.getElementById('forn-telefone').value = forn.telefone || '';
-    document.getElementById('forn-whatsapp').value = forn.whatsapp || '';
-    document.getElementById('forn-email').value = forn.email || '';
-    document.getElementById('forn-obs').value = forn.observacoes || '';
-    document.getElementById('modal-fornecedor-titulo').textContent = 'Editar fornecedor';
-    openModal('modal-fornecedor');
-  });
+  var html = '<div class="forn-header">';
+  html += '<div class="forn-avatar">' + inicial + '</div>';
+  html += '<div>';
+  html += '<div class="forn-nome-big">' + esc(f.nome) + '</div>';
+  if (f.observacoes) html += '<div class="forn-espec">' + esc(f.observacoes) + '</div>';
+  html += '<div class="forn-contatos-grid">' + contatos + '</div>';
+  html += '</div>';
+  html += '<button class="btn btn-secondary btn-sm" onclick="abrirEditar(' + f.id + ')" style="display:flex;align-items:center;gap:6px;"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Editar</button>';
+  html += '</div>';
+  document.getElementById('detalhe-header-card').innerHTML = html;
 }
-
-// ─── Catálogos ────────────────────────────────────────────
 
 function renderCatalogos(catalogos) {
   var el = document.getElementById('lista-catalogos');
   document.getElementById('badge-catalogos').textContent = catalogos.length;
-
-  if (catalogos.length === 0) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📂</div><div class="empty-desc">Nenhum catálogo ainda.</div></div>';
+  if (!catalogos.length) {
+    el.innerHTML = '<div class="empty-box" style="padding:32px 16px;"><div class="ei" style="font-size:2.5rem;">📂</div><div class="ep">Nenhum catálogo ainda.<br>Faça upload de um PDF.</div></div>';
     return;
   }
-
-  var html = '<div style="display:flex;flex-direction:column;gap:8px;padding:4px 0;">';
+  var html = '';
   catalogos.forEach(function(c) {
-    var statusBadge = '';
-    var statusClass = 'badge-gray';
-    var statusLabel = c.status;
-    if (c.status === 'processado') { statusClass = 'badge-green'; statusLabel = 'Indexado'; }
-    else if (c.status === 'processando') { statusClass = 'badge-yellow'; statusLabel = 'Processando...'; }
-    else if (c.status === 'erro') { statusClass = 'badge-red'; statusLabel = 'Erro'; }
-    else if (c.status === 'pendente') { statusClass = 'badge-gray'; statusLabel = 'Aguardando'; }
-    statusBadge = '<span class="badge ' + statusClass + '">' + statusLabel + '</span>';
+    var badge = '';
+    if (c.status === 'processado') badge = '<span class="badge badge-green" style="font-size:0.8rem;">✓ Indexado</span>';
+    else if (c.status === 'processando') badge = '<span class="badge badge-yellow" style="font-size:0.8rem;">⟳ Processando...</span>';
+    else if (c.status === 'erro') badge = '<span class="badge badge-red" style="font-size:0.8rem;" title="' + esc(c.erro || '') + '">✕ Erro</span>';
+    else badge = '<span class="badge badge-gray" style="font-size:0.8rem;">⏳ Aguardando</span>';
 
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:var(--r);gap:10px;">';
-    html += '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">';
-    html += '<span style="font-size:1.2rem;flex-shrink:0;">📄</span>';
-    html += '<div style="min-width:0;">';
-    html += '<div style="font-size:0.85rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(c.nome_arquivo) + '">' + esc(c.nome_arquivo) + '</div>';
-    html += '<div style="font-size:0.75rem;color:var(--text3);">' + (c.paginas > 0 ? c.paginas + ' págs · ' : '') + c.total_chunks + ' trechos · ' + formatDate(c.criado_em) + '</div>';
-    html += '</div>';
-    html += '</div>';
-    html += '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">';
-    html += statusBadge;
-    if (c.status === 'erro') {
-      html += '<button class="btn btn-ghost btn-sm" onclick="reprocessarCatalogo(' + FORNECEDOR_ATIVO + ',' + c.id + ')" title="' + esc(c.erro || 'Erro') + '">↻</button>';
-    }
-    html += '<button class="btn btn-danger btn-sm btn-icon" onclick="excluirCatalogo(' + FORNECEDOR_ATIVO + ',' + c.id + ')" title="Excluir catálogo">';
-    html += '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
-    html += '</button>';
-    html += '</div>';
-    html += '</div>';
+    html += '<div class="cat-item">';
+    html += '<div class="cat-ico">📄</div>';
+    html += '<div class="cat-info"><div class="cat-nome" title="' + esc(c.nome_arquivo) + '">' + esc(c.nome_arquivo) + '</div>';
+    html += '<div class="cat-meta">' + (c.paginas > 0 ? c.paginas + ' pág · ' : '') + (c.total_chunks || 0) + ' trechos · ' + formatDate(c.criado_em) + '</div></div>';
+    html += '<div class="cat-acoes">' + badge;
+    if (c.status === 'erro') html += '<button class="btn btn-ghost btn-sm btn-icon" onclick="reprocessar(' + FORNECEDOR_ATIVO + ',' + c.id + ')" title="Tentar novamente">↻</button>';
+    html += '<button class="btn btn-danger btn-sm btn-icon" onclick="excluirCat(' + FORNECEDOR_ATIVO + ',' + c.id + ')" title="Excluir catálogo"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>';
+    html += '</div></div>';
   });
-  html += '</div>';
   el.innerHTML = html;
 
-  // Auto-refresh de catalogos em processamento
-  var processando = catalogos.some(function(c) { return c.status === 'processando' || c.status === 'pendente'; });
-  if (processando) {
-    setTimeout(function() { if (FORNECEDOR_ATIVO) carregarDetalhe(FORNECEDOR_ATIVO); }, 3000);
-  }
+  var emProc = catalogos.some(function(c) { return c.status === 'processando' || c.status === 'pendente'; });
+  if (emProc) setTimeout(function() { if (FORNECEDOR_ATIVO) verFornecedor(FORNECEDOR_ATIVO); }, 3500);
+
+  var indexados = catalogos.filter(function(c) { return c.status === 'processado' && c.total_chunks > 0; });
+  if (indexados.length > 0) carregarTabelaProdutos();
 }
 
-function reprocessarCatalogo(fid, cid) {
+function carregarTabelaProdutos() {
+  var campo = document.getElementById('campo-busca');
+  var q = campo && campo.value.trim() ? campo.value.trim() : 'produto material';
+  apiPost('/api/busca', { consulta: q, limite: 20 }).then(function(data) {
+    var forn = data.resultados && data.resultados.find(function(r) { return r.fornecedor_id === FORNECEDOR_ATIVO; });
+    if (forn) {
+      document.getElementById('card-produtos').style.display = 'block';
+      var html = '<div class="prod-table-wrap"><table class="prod-table"><thead><tr><th>Trecho indexado do catálogo</th><th>Arquivo</th></tr></thead><tbody>';
+      html += '<tr><td><div class="prod-desc" style="font-size:0.88rem;line-height:1.7;">' + esc(forn.trecho) + '</div></td>';
+      html += '<td style="white-space:nowrap;font-size:0.8rem;color:var(--text2);">📄 ' + esc(forn.nome_arquivo || '—') + '</td></tr>';
+      html += '</tbody></table></div>';
+      document.getElementById('tabela-produtos').innerHTML = html;
+      document.getElementById('badge-produtos').textContent = data.total + ' resultado(s)';
+    }
+  }).catch(function(){});
+}
+
+function reprocessar(fid, cid) {
   apiPost('/api/fornecedores/' + fid + '/catalogo/' + cid + '/reprocessar', {}).then(function() {
     showToast('Reprocessamento iniciado!', 'info');
-    setTimeout(function() { carregarDetalhe(fid); }, 1500);
-  }).catch(function(err) {
-    showToast(err && err.error ? err.error : 'Erro ao reprocessar', 'error');
-  });
+    setTimeout(function() { if (FORNECEDOR_ATIVO) verFornecedor(fid); }, 2000);
+  }).catch(function(err) { showToast(err && err.error ? err.error : 'Erro', 'error'); });
 }
 
-function excluirCatalogo(fid, cid) {
+function excluirCat(fid, cid) {
   if (!confirm('Excluir este catálogo? Os dados de busca serão removidos.')) return;
   apiDelete('/api/fornecedores/' + fid + '/catalogo/' + cid).then(function() {
     showToast('Catálogo excluído.', 'success');
-    carregarDetalhe(fid);
+    verFornecedor(fid);
     carregarStats();
-  }).catch(function(err) {
-    showToast(err && err.error ? err.error : 'Erro ao excluir', 'error');
-  });
+  }).catch(function(err) { showToast(err && err.error ? err.error : 'Erro', 'error'); });
 }
 
-// ─── Upload PDF ───────────────────────────────────────────
-
-function dragOver(e) {
-  e.preventDefault();
-  document.getElementById('upload-zone').classList.add('drag-over');
-}
-function dragLeave() {
-  document.getElementById('upload-zone').classList.remove('drag-over');
-}
-function dropFile(e) {
-  e.preventDefault();
-  dragLeave();
-  var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (file) uploadPDF(file);
-}
+// ── UPLOAD PDF ─────────────────────────────────────────────
+function dragOver(e) { e.preventDefault(); document.getElementById('upload-zone').classList.add('drag-over'); }
+function dragLeave() { document.getElementById('upload-zone').classList.remove('drag-over'); }
+function dropFile(e) { e.preventDefault(); dragLeave(); var f = e.dataTransfer && e.dataTransfer.files[0]; if (f) uploadPDF(f); }
 
 function uploadPDF(file) {
   if (!file) return;
-  if (file.type !== 'application/pdf') {
-    showToast('Apenas arquivos PDF são aceitos', 'error');
-    return;
-  }
-  if (file.size > 50 * 1024 * 1024) {
-    showToast('Arquivo muito grande. Máximo: 50MB', 'error');
-    return;
-  }
-  if (!FORNECEDOR_ATIVO) {
-    showToast('Nenhum fornecedor selecionado', 'error');
-    return;
-  }
+  if (file.type !== 'application/pdf') { showToast('Apenas PDF aceito', 'error'); return; }
+  if (file.size > 50 * 1024 * 1024) { showToast('Arquivo muito grande. Máximo 50MB', 'error'); return; }
+  if (!FORNECEDOR_ATIVO) { showToast('Nenhum fornecedor selecionado', 'error'); return; }
 
   var zone = document.getElementById('upload-zone');
-  var progress = document.getElementById('upload-progress');
+  var bar  = document.getElementById('upload-progress');
   var fill = document.getElementById('progress-fill');
-  var status = document.getElementById('upload-status');
+  var stat = document.getElementById('upload-status');
 
-  progress.style.display = 'block';
-  zone.style.pointerEvents = 'none';
-  zone.style.opacity = '0.7';
+  bar.style.display = 'block'; stat.style.display = 'block';
+  stat.textContent = 'Enviando arquivo...';
+  zone.style.pointerEvents = 'none'; zone.style.opacity = '0.65';
 
-  // Simular progresso
   var pct = 0;
-  var interval = setInterval(function() {
-    pct = Math.min(pct + 8, 85);
-    fill.style.width = pct + '%';
-  }, 150);
+  var iv = setInterval(function() { pct = Math.min(pct + 5, 85); fill.style.width = pct + '%'; }, 180);
 
   var fd = new FormData();
   fd.append('arquivo', file);
 
   apiForm('/api/extracao/catalogo/' + FORNECEDOR_ATIVO, fd).then(function() {
-    clearInterval(interval);
-    fill.style.width = '100%';
-    status.textContent = 'Upload concluído! Processando...';
-    zone.style.pointerEvents = '';
-    zone.style.opacity = '';
+    clearInterval(iv); fill.style.width = '100%'; stat.textContent = 'Enviado! Indexando em background...';
+    zone.style.pointerEvents = ''; zone.style.opacity = '';
     document.getElementById('input-pdf').value = '';
-
-    setTimeout(function() {
-      progress.style.display = 'none';
-      fill.style.width = '0%';
-    }, 2000);
-
-    showToast('PDF enviado! Processando em background...', 'success');
-    setTimeout(function() { if (FORNECEDOR_ATIVO) carregarDetalhe(FORNECEDOR_ATIVO); }, 1500);
+    setTimeout(function() { bar.style.display = 'none'; stat.style.display = 'none'; fill.style.width = '0%'; }, 3500);
+    showToast('PDF enviado com sucesso! Indexando...', 'success');
+    setTimeout(function() { if (FORNECEDOR_ATIVO) verFornecedor(FORNECEDOR_ATIVO); }, 2000);
     carregarStats();
   }).catch(function(err) {
-    clearInterval(interval);
-    zone.style.pointerEvents = '';
-    zone.style.opacity = '';
-    progress.style.display = 'none';
-    fill.style.width = '0%';
+    clearInterval(iv);
+    zone.style.pointerEvents = ''; zone.style.opacity = '';
+    bar.style.display = 'none'; stat.style.display = 'none'; fill.style.width = '0%';
     showToast(err && err.error ? err.error : 'Erro ao enviar PDF', 'error');
   });
 }
 
-// ─── Configurações ────────────────────────────────────────
-
+// ── CONFIG ─────────────────────────────────────────────────
 function salvarPerfil() {
-  var body = {
-    nome: document.getElementById('cfg-nome').value.trim()
-  };
-
-  var senhaAtual = document.getElementById('cfg-senha-atual').value;
-  var senhaNova = document.getElementById('cfg-senha-nova').value;
-  if (senhaAtual && senhaNova) {
-    body.senha_atual = senhaAtual;
-    body.senha_nova = senhaNova;
-  }
-
+  var body = { nome: document.getElementById('cfg-nome').value.trim() };
+  var sa = document.getElementById('cfg-senha-atual').value;
+  var sn = document.getElementById('cfg-senha-nova').value;
+  if (sa && sn) { body.senha_atual = sa; body.senha_nova = sn; }
   apiPut('/api/auth/perfil', body).then(function() {
-    showToast('Perfil atualizado!', 'success');
+    showToast('Perfil atualizado com sucesso!', 'success');
     document.getElementById('cfg-senha-atual').value = '';
     document.getElementById('cfg-senha-nova').value = '';
-    if (body.nome) {
-      document.getElementById('user-nome').textContent = body.nome;
-      document.getElementById('user-avatar').textContent = body.nome.charAt(0).toUpperCase();
-    }
-  }).catch(function(err) {
-    showToast(err && err.error ? err.error : 'Erro ao salvar perfil', 'error');
-  });
+    if (body.nome) { document.getElementById('user-nome').textContent = body.nome; document.getElementById('user-avatar').textContent = body.nome.charAt(0).toUpperCase(); }
+  }).catch(function(err) { showToast(err && err.error ? err.error : 'Erro', 'error'); });
 }
 
 function ativarPlano() {
   var email = document.getElementById('ativar-email').value.trim();
   var plano = document.getElementById('ativar-plano').value;
   if (!email || !plano) { showToast('Preencha email e plano', 'warning'); return; }
-
   apiPost('/api/auth/ativar-plano', { email: email, plano: plano }).then(function(data) {
     showToast(data.msg || 'Plano ativado!', 'success');
-    // Recarregar dados do usuário
-    apiGet('/api/auth/me').then(function(u) {
-      USUARIO = u;
-      renderUsuario();
-    });
-  }).catch(function(err) {
-    showToast(err && err.error ? err.error : 'Erro ao ativar plano', 'error');
-  });
+    apiGet('/api/auth/me').then(function(u) { USUARIO = u; renderUsuario(); });
+  }).catch(function(err) { showToast(err && err.error ? err.error : 'Erro', 'error'); });
 }
-
-// ─── Logout ───────────────────────────────────────────────
 
 function logout() {
-  apiPost('/api/auth/logout', {}).then(function() {
-    window.location.href = '/login.html';
-  }).catch(function() {
-    window.location.href = '/login.html';
-  });
+  apiPost('/api/auth/logout', {}).then(function() { localStorage.removeItem('lf_token'); window.location.href = '/login.html'; }).catch(function() { localStorage.removeItem('lf_token'); window.location.href = '/login.html'; });
 }
 
-// ─── Responsivo ───────────────────────────────────────────
-
-window.addEventListener('resize', function() {
-  if (window.innerWidth > 768) {
-    closeMobileSidebar();
-  }
-});
+window.addEventListener('resize', function() { if (window.innerWidth > 768) closeMobileSidebar(); });
 </script>
 </body>
 </html>
