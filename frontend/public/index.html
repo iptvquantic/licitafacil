@@ -1153,8 +1153,28 @@
 <div class="toast-container" id="toast-container"></div>
 <div id="mobile-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99;backdrop-filter:blur(2px);" onclick="closeMobileSidebar()"></div>
 
-<script src="js/utils.js?v=5"></script>
+<script src="js/utils.js?v=6"></script>
 <script>
+// ════════════════════════════════════════════════════════
+// FALLBACK GLOBAL DE ERRO — nunca deixar tela em branco
+// ════════════════════════════════════════════════════════
+window.onerror = function(msg, url, line, col, error) {
+  console.error('Erro capturado:', msg, 'linha', line);
+  var jaExiste = document.getElementById('erro-fallback-box');
+  if (jaExiste) return true; // já mostrou, não duplicar
+  var box = document.createElement('div');
+  box.id = 'erro-fallback-box';
+  box.style.cssText = 'position:fixed;bottom:20px;right:20px;left:20px;max-width:420px;margin-left:auto;background:#1a1030;border:1px solid #ef4444;border-radius:14px;padding:18px 20px;z-index:99999;box-shadow:0 8px 32px rgba(0,0,0,0.5);font-family:Inter,sans-serif;';
+  box.innerHTML = '<div style="display:flex;gap:10px;align-items:flex-start;">'
+    + '<span style="font-size:1.3rem;flex-shrink:0;">⚠️</span>'
+    + '<div><div style="color:#fff;font-weight:700;font-size:0.9rem;margin-bottom:4px;">Algo não carregou corretamente</div>'
+    + '<div style="color:#cbd5e1;font-size:0.82rem;line-height:1.5;">Tente recarregar a página. Se o problema continuar, entre em contato com o suporte.</div>'
+    + '<button onclick="window.location.reload()" style="margin-top:10px;background:#ef4444;color:#fff;border:none;padding:7px 16px;border-radius:8px;font-weight:600;font-size:0.82rem;cursor:pointer;">Recarregar página</button>'
+    + '</div></div>';
+  document.body.appendChild(box);
+  return true; // impede o erro de aparecer no console do usuário final como "Uncaught"
+};
+
 // ════════════════════════════════════════════════════════
 // LICITAFÁCIL — APP PRINCIPAL v3.0
 // ════════════════════════════════════════════════════════
@@ -1559,40 +1579,62 @@ function carregarProdutos(fornecedorId, catalogos) {
 }
 
 function renderProdutosDoTrecho(trecho, arquivo, catalogos) {
-  // Parsear o trecho do catálogo estruturado pelo Prompt Mestre
-  var linhas = trecho.split('\n').filter(function(l) { return l.trim().length > 5; });
+  // Parser tolerante do Prompt Mestre — aceita variações de formatação
+  var linhas = trecho.split('\n').filter(function(l) { return l.trim().length > 3; });
   var produtos = [];
   var prodAtual = null;
 
-  linhas.forEach(function(linha) {
-    linha = linha.trim();
-    if (/^PRODUTO\s+\d+/i.test(linha) || /^---/.test(linha)) {
+  // Marcador de início de produto: aceita "PRODUTO 1", "Produto 01", "1.", "1)", "---"
+  var reNovoProduto = /^(PRODUTO\s*[:\-]?\s*\d+|Produto\s*[:\-]?\s*\d+|\d+[\.\)]\s|---+)/i;
+
+  // Valores considerados "vazio" — nunca mostrar esses textos ao usuário
+  var reVazio = /^(n[ãa]o informado|nao informado|n\/a|na|--+|-|—|null|undefined)$/i;
+
+  function limpar(v) {
+    if (!v) return '';
+    v = v.trim();
+    return reVazio.test(v) ? '' : v;
+  }
+
+  // Extrai o valor de uma linha "Label: valor" tolerando variações de acento/hífen
+  function extrair(linha, labels) {
+    for (var i = 0; i < labels.length; i++) {
+      var re = new RegExp('^' + labels[i] + '[^:]*[:\\-]\\s*(.+)', 'i');
+      var m = linha.match(re);
+      if (m) return limpar(m[1]);
+    }
+    return null;
+  }
+
+  linhas.forEach(function(linhaOriginal) {
+    var linha = linhaOriginal.trim();
+    if (reNovoProduto.test(linha)) {
       if (prodAtual && prodAtual.nome) produtos.push(prodAtual);
       prodAtual = { nome: '', codigo: '', categoria: '', descricao: '', bitola: '', tensao: '', material: '', norma: '', preco: '', unidade: '', aplicacao: '' };
-    } else if (prodAtual !== null) {
-      var match;
-      if ((match = linha.match(/^Nome:\s*(.+)/i))) prodAtual.nome = match[1].trim();
-      else if ((match = linha.match(/^C[oó]digo[^:]*:\s*(.+)/i))) prodAtual.codigo = match[1].replace(/nao informado/i,'').trim();
-      else if ((match = linha.match(/^Categoria:\s*(.+)/i))) prodAtual.categoria = match[1].replace(/nao informado/i,'').trim();
-      else if ((match = linha.match(/^Descri[cç][aã]o[^:]*:\s*(.+)/i))) prodAtual.descricao = match[1].replace(/nao informado/i,'').trim();
-      else if ((match = linha.match(/^Bitola[^:]*:\s*(.+)/i))) prodAtual.bitola = match[1].replace(/nao informado/i,'').trim();
-      else if ((match = linha.match(/^Tens[aã]o[^:]*:\s*(.+)/i))) prodAtual.tensao = match[1].replace(/nao informado/i,'').trim();
-      else if ((match = linha.match(/^Material[^:]*:\s*(.+)/i))) prodAtual.material = match[1].replace(/nao informado/i,'').trim();
-      else if ((match = linha.match(/^Norma[^:]*:\s*(.+)/i))) prodAtual.norma = match[1].replace(/nao informado/i,'').trim();
-      else if ((match = linha.match(/^Pre[cç]o[^:]*:\s*(.+)/i))) prodAtual.preco = match[1].replace(/nao informado/i,'').trim();
-      else if ((match = linha.match(/^Unidade[^:]*:\s*(.+)/i))) prodAtual.unidade = match[1].replace(/nao informado/i,'').trim();
-      else if ((match = linha.match(/^Aplica[cç][aã]o[^:]*:\s*(.+)/i))) prodAtual.aplicacao = match[1].replace(/nao informado/i,'').trim();
-    } else if (!prodAtual) {
-      // Antes do primeiro PRODUTO — pode ser trecho livre
-      prodAtual = { nome: 'Extrato do catálogo', descricao: linhas.slice(0,6).join(' '), codigo: '', categoria: '', bitola: '', tensao: '', material: '', norma: '', preco: '', unidade: '', aplicacao: '' };
-      produtos.push(prodAtual);
-      prodAtual = null;
+      return;
+    }
+    if (!prodAtual) return;
+
+    var v;
+    if ((v = extrair(linha, ['Nome'])) !== null) prodAtual.nome = v;
+    else if ((v = extrair(linha, ['C[oó]digo', 'Refer[eê]ncia', 'SKU'])) !== null) prodAtual.codigo = v;
+    else if ((v = extrair(linha, ['Categoria'])) !== null) prodAtual.categoria = v;
+    else if ((v = extrair(linha, ['Descri[cç][aã]o'])) !== null) prodAtual.descricao = v;
+    else if ((v = extrair(linha, ['Bitola', 'Dimens[aã]o'])) !== null) prodAtual.bitola = v;
+    else if ((v = extrair(linha, ['Tens[aã]o'])) !== null) prodAtual.tensao = v;
+    else if ((v = extrair(linha, ['Material'])) !== null) prodAtual.material = v;
+    else if ((v = extrair(linha, ['Norma'])) !== null) prodAtual.norma = v;
+    else if ((v = extrair(linha, ['Pre[cç]o'])) !== null) prodAtual.preco = v;
+    else if ((v = extrair(linha, ['Unidade'])) !== null) prodAtual.unidade = v;
+    else if ((v = extrair(linha, ['Aplica[cç][aã]o'])) !== null) prodAtual.aplicacao = v;
+    else if (!prodAtual.nome && linha.length > 3 && linha.length < 120) {
+      // Linha sem label reconhecido logo após o marcador de produto — assume que é o nome
+      prodAtual.nome = linha;
     }
   });
   if (prodAtual && prodAtual.nome) produtos.push(prodAtual);
 
-  // Se não parseou estruturado, mostrar trecho bruto organizado
-  if (!produtos.length || (produtos.length === 1 && produtos[0].nome === 'Extrato do catálogo')) {
+  if (!produtos.length) {
     renderTrechoLivre(trecho, arquivo, catalogos);
     return;
   }
@@ -1604,7 +1646,6 @@ function renderProdutosDoTrecho(trecho, arquivo, catalogos) {
   html += '</div>';
   html += '<div class="prod-grid" id="prod-grid">';
   produtos.forEach(function(p, i) {
-    if (!p.nome) return;
     html += '<div class="prod-card" data-nome="' + esc((p.nome + ' ' + p.codigo + ' ' + p.categoria + ' ' + p.descricao).toLowerCase()) + '">';
     html += '<div class="prod-num">' + (i + 1) + '</div>';
     html += '<div class="prod-body">';
