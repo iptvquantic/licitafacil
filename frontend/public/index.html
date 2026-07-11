@@ -1536,7 +1536,12 @@ function renderHeaderFornecedor(f) {
 function carregarProdutos(fornecedorId, catalogos) {
   var indexados = catalogos.filter(function(c) { return c.status === 'processado' && c.total_chunks > 0; });
   if (!indexados.length) {
-    document.getElementById('produtos-container').innerHTML = '<div class="empty-box"><div class="ei">📦</div><div class="eh">Nenhum produto indexado ainda</div><div class="ep">Adicione um catálogo PDF para indexar os produtos deste fornecedor.</div><button class="btn btn-primary" style="margin-top:16px;" onclick="mudarAba('upload')">⬆ Adicionar catálogo</button></div>';
+    var emptyHtml = '<div class="empty-box"><div class="ei">📦</div>';
+    emptyHtml += '<div class="eh">Nenhum produto indexado ainda</div>';
+    emptyHtml += '<div class="ep">Adicione um catálogo PDF para indexar os produtos.</div>';
+    emptyHtml += '<div style="text-align:center;margin-top:16px;"><button class="btn btn-primary" id="btn-add-cat">⬆ Adicionar catálogo</button></div></div>';
+    document.getElementById('produtos-container').innerHTML = emptyHtml;
+    var btnCat = document.getElementById('btn-add-cat'); if (btnCat) btnCat.addEventListener('click', function(){ mudarAba('upload'); });
     return;
   }
   // Buscar chunks do fornecedor para extrair produtos
@@ -1545,7 +1550,8 @@ function carregarProdutos(fornecedorId, catalogos) {
     if (forn && forn.trecho) {
       renderProdutosDoTrecho(forn.trecho, forn.nome_arquivo, indexados);
     } else {
-      document.getElementById('produtos-container').innerHTML = '<div class="empty-box"><div class="ei">🔍</div><div class="eh">Catálogo indexado</div><div class="ep">Use a Busca IA para pesquisar produtos deste fornecedor.</div><button class="btn btn-primary" style="margin-top:16px;" onclick="showSection('busca')">Ir para Busca IA</button></div>';
+      document.getElementById('produtos-container').innerHTML = '<div class="empty-box"><div class="ei">🔍</div><div class="eh">Catálogo indexado</div><div class="ep">Use a Busca IA para pesquisar produtos deste fornecedor.</div><button class="btn btn-primary" style="margin-top:16px;" id="btn-ir-busca">Ir para Busca IA</button></div>';
+      var bIB = document.getElementById('btn-ir-busca'); if(bIB) bIB.onclick = function(){ showSection('busca'); };
     }
   }).catch(function() {
     document.getElementById('produtos-container').innerHTML = '<div class="empty-box"><div class="ei">⚠️</div><div class="ep">Erro ao carregar produtos.</div></div>';
@@ -1626,9 +1632,9 @@ function renderProdutosDoTrecho(trecho, arquivo, catalogos) {
 
 function renderTrechoLivre(trecho, arquivo, catalogos) {
   // Trecho não estruturado — mostrar organizado por parágrafos
-  var paragrafos = trecho.split(/
+  var paragrafos = trecho.split('\n\n').filter(function(p) { return p.trim().length > 10; });
 
-+/).filter(function(p) { return p.trim().length > 10; });
+
   if (!paragrafos.length) paragrafos = [trecho];
 
   var html = '<div class="prod-header">';
