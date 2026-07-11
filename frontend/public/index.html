@@ -559,6 +559,214 @@
     @media (max-width: 480px) {
       .forn-header { grid-template-columns: 1fr; }
     }
+
+    /* ─── SISTEMA DE ABAS ───────────────────────────────── */
+    .abas-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      overflow: hidden;
+    }
+    .abas-nav {
+      display: flex;
+      border-bottom: 2px solid var(--border);
+      background: var(--surface2);
+      overflow-x: auto;
+    }
+    .aba-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 22px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      font-family: var(--font);
+      color: var(--text2);
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .aba-btn:hover { color: var(--text); background: rgba(0,212,255,0.04); }
+    .aba-btn.ativa { color: var(--accent); border-bottom-color: var(--accent); background: rgba(0,212,255,0.04); }
+    .aba-badge {
+      background: var(--accent);
+      color: #000;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 99px;
+      min-width: 20px;
+      text-align: center;
+    }
+    .aba-content { padding: 24px; }
+
+    /* ─── TABELA DE PRODUTOS INSTITUCIONAL ──────────────── */
+    .prod-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .prod-title {
+      font-family: var(--font-h);
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .prod-subtitle {
+      font-size: 0.8rem;
+      color: var(--text2);
+      margin-top: 2px;
+    }
+    .prod-filtro {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .prod-filtro input {
+      padding: 8px 14px;
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: var(--r);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 0.85rem;
+      width: 200px;
+    }
+    .prod-filtro input:focus { outline: none; border-color: var(--accent); }
+
+    .prod-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .prod-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 18px 20px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 16px;
+      align-items: start;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .prod-card:hover {
+      border-color: rgba(0,212,255,0.3);
+      box-shadow: 0 2px 16px rgba(0,212,255,0.06);
+    }
+
+    .prod-num {
+      width: 32px; height: 32px;
+      border-radius: var(--r-sm);
+      background: rgba(0,212,255,0.1);
+      color: var(--accent);
+      font-size: 0.78rem;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .prod-body {}
+    .prod-nome-linha {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .prod-nome-txt {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--text);
+    }
+    .prod-cod-tag {
+      font-family: monospace;
+      font-size: 0.75rem;
+      background: rgba(0,212,255,0.1);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid rgba(0,212,255,0.2);
+    }
+    .prod-cat-tag {
+      font-size: 0.72rem;
+      background: rgba(124,58,237,0.1);
+      color: var(--accent2);
+      padding: 2px 8px;
+      border-radius: 99px;
+      border: 1px solid rgba(124,58,237,0.2);
+    }
+
+    .prod-desc-txt {
+      font-size: 0.84rem;
+      color: var(--text2);
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+
+    .prod-specs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .spec-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.75rem;
+      padding: 3px 10px;
+      border-radius: 99px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      white-space: nowrap;
+    }
+    .spec-chip .spec-label { color: var(--text3); font-size: 0.68rem; }
+    .spec-chip.destaque { border-color: rgba(16,185,129,0.25); background: rgba(16,185,129,0.07); color: #34d399; }
+
+    .prod-side {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .prod-norma-badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 99px;
+      background: rgba(16,185,129,0.1);
+      color: #34d399;
+      border: 1px solid rgba(16,185,129,0.2);
+      text-align: center;
+      max-width: 140px;
+      word-break: break-word;
+    }
+    .prod-preco {
+      font-family: var(--font-h);
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .prod-unidade {
+      font-size: 0.72rem;
+      color: var(--text3);
+    }
+
+    @media (max-width: 640px) {
+      .prod-card { grid-template-columns: auto 1fr; }
+      .prod-side { display: none; }
+      .aba-btn { padding: 12px 14px; font-size: 0.8rem; }
+    }
   </style>
 </head>
 <body>
@@ -720,56 +928,97 @@
 
     <!-- ════ DETALHE ═════════════════════════════════════ -->
     <section id="section-detalhe" class="page-content fade-in" style="display:none;">
+
+      <!-- Breadcrumb -->
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
         <button class="btn btn-ghost btn-sm" onclick="showSection('fornecedores')" style="display:flex;align-items:center;gap:5px;">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
           Voltar
         </button>
-        <h2 style="font-size:1.1rem;font-weight:700;color:var(--text);" id="detalhe-nome">—</h2>
+        <span style="color:var(--text3);font-size:0.82rem;">Fornecedores</span>
+        <span style="color:var(--text3);font-size:0.82rem;">/</span>
+        <span style="font-size:0.88rem;font-weight:600;color:var(--text);" id="detalhe-nome">—</span>
       </div>
 
+      <!-- Header Fornecedor -->
       <div id="detalhe-header-card"></div>
 
-      <div class="detalhe-cols">
-        <div class="card">
-          <div class="card-header"><span class="card-title">Adicionar catálogo</span></div>
-          <div class="upload-area" id="upload-zone" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
-            <input type="file" id="input-pdf" accept=".pdf" style="display:none;" onchange="uploadPDF(this.files[0])">
-            <div class="upload-emoji">📄</div>
-            <div class="upload-titulo">Arraste o PDF aqui</div>
-            <div class="upload-sub">ou <a href="javascript:void(0)" onclick="document.getElementById('input-pdf').click()">clique para selecionar</a> · Máx. 50MB</div>
-            <div class="prog-bar" id="upload-progress"><div class="prog-fill" id="progress-fill"></div></div>
-            <div id="upload-status" style="display:none;font-size:0.8rem;color:var(--text2);margin-top:8px;"></div>
-          </div>
-          <div class="upload-dica">
-            <strong>💡 Dica:</strong> Use o Prompt Mestre para extrair o catálogo em outra IA → cole no Word → salve como PDF → anexe aqui para indexação automática.
+      <!-- ABAS -->
+      <div class="abas-wrap">
+        <div class="abas-nav">
+          <button class="aba-btn ativa" onclick="mudarAba('produtos')" id="aba-produtos">
+            📦 Produtos
+          </button>
+          <button class="aba-btn" onclick="mudarAba('catalogos')" id="aba-catalogos">
+            📄 Catálogos
+            <span class="aba-badge" id="badge-catalogos">0</span>
+          </button>
+          <button class="aba-btn" onclick="mudarAba('upload')" id="aba-upload">
+            ⬆ Adicionar catálogo
+          </button>
+        </div>
+
+        <!-- ABA PRODUTOS -->
+        <div class="aba-content" id="content-produtos">
+          <div id="produtos-container">
+            <div class="empty-box">
+              <div class="ei">📦</div>
+              <div class="eh">Nenhum produto indexado</div>
+              <div class="ep">Faça o upload de um catálogo PDF para indexar os produtos deste fornecedor.</div>
+              <button class="btn btn-primary" style="margin-top:16px;" onclick="mudarAba('upload')">⬆ Adicionar catálogo</button>
+            </div>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Catálogos</span>
-            <span class="badge badge-gray" id="badge-catalogos">0</span>
-          </div>
+        <!-- ABA CATÁLOGOS -->
+        <div class="aba-content" id="content-catalogos" style="display:none;">
           <div id="lista-catalogos">
-            <div class="empty-box" style="padding:32px 16px;">
-              <div class="ei" style="font-size:2.5rem;">📂</div>
+            <div class="empty-box" style="padding:40px 24px;">
+              <div class="ei">📂</div>
               <div class="ep">Nenhum catálogo ainda</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ABA UPLOAD -->
+        <div class="aba-content" id="content-upload" style="display:none;">
+          <div style="max-width:620px;margin:0 auto;">
+            <div class="upload-area" id="upload-zone" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+              <input type="file" id="input-pdf" accept=".pdf" style="display:none;" onchange="uploadPDF(this.files[0])">
+              <div class="upload-emoji">📄</div>
+              <div class="upload-titulo">Arraste o PDF aqui</div>
+              <div class="upload-sub">ou <a href="javascript:void(0)" onclick="document.getElementById('input-pdf').click()">clique para selecionar</a> · Máx. 50MB</div>
+              <div class="prog-bar" id="upload-progress"><div class="prog-fill" id="progress-fill"></div></div>
+              <div id="upload-status" style="display:none;font-size:0.8rem;color:var(--text2);margin-top:8px;"></div>
+            </div>
+            <div style="margin-top:20px;background:linear-gradient(135deg,rgba(0,212,255,0.06),rgba(124,58,237,0.04));border:1px solid rgba(0,212,255,0.15);border-radius:var(--r-lg);padding:20px 24px;">
+              <div style="font-size:0.85rem;font-weight:700;color:var(--accent);margin-bottom:12px;">💡 Como usar o Prompt Mestre</div>
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <div style="display:flex;align-items:flex-start;gap:12px;">
+                  <div style="width:28px;height:28px;border-radius:50%;background:var(--accent);color:#000;font-weight:700;font-size:0.8rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
+                  <div style="font-size:0.85rem;color:var(--text2);line-height:1.6;">Abra o catálogo do fornecedor em qualquer IA (ChatGPT, Gemini, Claude)</div>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:12px;">
+                  <div style="width:28px;height:28px;border-radius:50%;background:var(--accent);color:#000;font-weight:700;font-size:0.8rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
+                  <div style="font-size:0.85rem;color:var(--text2);line-height:1.6;">Cole o <strong style="color:var(--text);">Prompt Mestre</strong> e anexe o catálogo</div>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:12px;">
+                  <div style="width:28px;height:28px;border-radius:50%;background:var(--accent);color:#000;font-weight:700;font-size:0.8rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
+                  <div style="font-size:0.85rem;color:var(--text2);line-height:1.6;">Copie o resultado → cole no Word → salve como PDF</div>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:12px;">
+                  <div style="width:28px;height:28px;border-radius:50%;background:var(--accent);color:#000;font-weight:700;font-size:0.8rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">4</div>
+                  <div style="font-size:0.85rem;color:var(--text2);line-height:1.6;">Arraste o PDF aqui — o sistema indexa automaticamente</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="card" id="card-produtos" style="display:none;">
-        <div class="card-header">
-          <span class="card-title">Produtos indexados do catálogo</span>
-          <span class="badge badge-green" id="badge-produtos">—</span>
-        </div>
-        <div id="tabela-produtos"></div>
-      </div>
     </section>
 
-    <!-- ════ CONFIG ══════════════════════════════════════ -->
+<!-- ════ CONFIG ══════════════════════════════════════ -->
     <section id="section-config" class="page-content fade-in" style="display:none;">
       <h2 style="font-size:1.15rem;font-weight:700;color:var(--text);margin-bottom:20px;">Configurações</h2>
       <div class="config-grid">
@@ -1236,17 +1485,32 @@ function confirmarExclusao() {
   }).catch(function(err) { setLoading(btn, false, 'Excluir permanentemente'); showToast(err && err.error ? err.error : 'Erro ao excluir', 'error'); });
 }
 
+// ── ABAS ──────────────────────────────────────────────────
+var ABA_ATUAL = 'produtos';
+
+function mudarAba(aba) {
+  ABA_ATUAL = aba;
+  ['produtos','catalogos','upload'].forEach(function(a) {
+    var btn = document.getElementById('aba-' + a);
+    var div = document.getElementById('content-' + a);
+    if (btn) btn.classList.toggle('ativa', a === aba);
+    if (div) div.style.display = a === aba ? 'block' : 'none';
+  });
+}
+
 // ── DETALHE FORNECEDOR ────────────────────────────────────
 function verFornecedor(id) {
   showSection('detalhe');
   FORNECEDOR_ATIVO = id;
+  mudarAba('produtos');
   document.getElementById('detalhe-nome').textContent = 'Carregando...';
   document.getElementById('detalhe-header-card').innerHTML = '';
-  document.getElementById('card-produtos').style.display = 'none';
+  document.getElementById('produtos-container').innerHTML = '<div class="empty-box"><div class="spinner spinner-lg" style="margin:0 auto;"></div></div>';
   apiGet('/api/fornecedores/' + id).then(function(f) {
     document.getElementById('detalhe-nome').textContent = f.nome;
     renderHeaderFornecedor(f);
     renderCatalogos(f.catalogos || []);
+    carregarProdutos(id, f.catalogos || []);
   }).catch(function() { document.getElementById('detalhe-nome').textContent = 'Erro ao carregar'; });
 }
 
@@ -1267,6 +1531,130 @@ function renderHeaderFornecedor(f) {
   html += '<button class="btn btn-secondary btn-sm" onclick="abrirEditar(' + f.id + ')" style="display:flex;align-items:center;gap:6px;"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Editar</button>';
   html += '</div>';
   document.getElementById('detalhe-header-card').innerHTML = html;
+}
+
+function carregarProdutos(fornecedorId, catalogos) {
+  var indexados = catalogos.filter(function(c) { return c.status === 'processado' && c.total_chunks > 0; });
+  if (!indexados.length) {
+    document.getElementById('produtos-container').innerHTML = '<div class="empty-box"><div class="ei">📦</div><div class="eh">Nenhum produto indexado ainda</div><div class="ep">Adicione um catálogo PDF para indexar os produtos deste fornecedor.</div><button class="btn btn-primary" style="margin-top:16px;" onclick="mudarAba('upload')">⬆ Adicionar catálogo</button></div>';
+    return;
+  }
+  // Buscar chunks do fornecedor para extrair produtos
+  apiPost('/api/busca', { consulta: 'produto material cabo fio equipamento item fornecimento', limite: 1 }).then(function(data) {
+    var forn = data.resultados && data.resultados.find(function(r) { return r.fornecedor_id === fornecedorId; });
+    if (forn && forn.trecho) {
+      renderProdutosDoTrecho(forn.trecho, forn.nome_arquivo, indexados);
+    } else {
+      document.getElementById('produtos-container').innerHTML = '<div class="empty-box"><div class="ei">🔍</div><div class="eh">Catálogo indexado</div><div class="ep">Use a Busca IA para pesquisar produtos deste fornecedor.</div><button class="btn btn-primary" style="margin-top:16px;" onclick="showSection('busca')">Ir para Busca IA</button></div>';
+    }
+  }).catch(function() {
+    document.getElementById('produtos-container').innerHTML = '<div class="empty-box"><div class="ei">⚠️</div><div class="ep">Erro ao carregar produtos.</div></div>';
+  });
+}
+
+function renderProdutosDoTrecho(trecho, arquivo, catalogos) {
+  // Parsear o trecho do catálogo estruturado pelo Prompt Mestre
+  var linhas = trecho.split('\n').filter(function(l) { return l.trim().length > 5; });
+  var produtos = [];
+  var prodAtual = null;
+
+  linhas.forEach(function(linha) {
+    linha = linha.trim();
+    if (/^PRODUTO\s+\d+/i.test(linha) || /^---/.test(linha)) {
+      if (prodAtual && prodAtual.nome) produtos.push(prodAtual);
+      prodAtual = { nome: '', codigo: '', categoria: '', descricao: '', bitola: '', tensao: '', material: '', norma: '', preco: '', unidade: '', aplicacao: '' };
+    } else if (prodAtual !== null) {
+      var match;
+      if ((match = linha.match(/^Nome:\s*(.+)/i))) prodAtual.nome = match[1].trim();
+      else if ((match = linha.match(/^C[oó]digo[^:]*:\s*(.+)/i))) prodAtual.codigo = match[1].replace(/nao informado/i,'').trim();
+      else if ((match = linha.match(/^Categoria:\s*(.+)/i))) prodAtual.categoria = match[1].replace(/nao informado/i,'').trim();
+      else if ((match = linha.match(/^Descri[cç][aã]o[^:]*:\s*(.+)/i))) prodAtual.descricao = match[1].replace(/nao informado/i,'').trim();
+      else if ((match = linha.match(/^Bitola[^:]*:\s*(.+)/i))) prodAtual.bitola = match[1].replace(/nao informado/i,'').trim();
+      else if ((match = linha.match(/^Tens[aã]o[^:]*:\s*(.+)/i))) prodAtual.tensao = match[1].replace(/nao informado/i,'').trim();
+      else if ((match = linha.match(/^Material[^:]*:\s*(.+)/i))) prodAtual.material = match[1].replace(/nao informado/i,'').trim();
+      else if ((match = linha.match(/^Norma[^:]*:\s*(.+)/i))) prodAtual.norma = match[1].replace(/nao informado/i,'').trim();
+      else if ((match = linha.match(/^Pre[cç]o[^:]*:\s*(.+)/i))) prodAtual.preco = match[1].replace(/nao informado/i,'').trim();
+      else if ((match = linha.match(/^Unidade[^:]*:\s*(.+)/i))) prodAtual.unidade = match[1].replace(/nao informado/i,'').trim();
+      else if ((match = linha.match(/^Aplica[cç][aã]o[^:]*:\s*(.+)/i))) prodAtual.aplicacao = match[1].replace(/nao informado/i,'').trim();
+    } else if (!prodAtual) {
+      // Antes do primeiro PRODUTO — pode ser trecho livre
+      prodAtual = { nome: 'Extrato do catálogo', descricao: linhas.slice(0,6).join(' '), codigo: '', categoria: '', bitola: '', tensao: '', material: '', norma: '', preco: '', unidade: '', aplicacao: '' };
+      produtos.push(prodAtual);
+      prodAtual = null;
+    }
+  });
+  if (prodAtual && prodAtual.nome) produtos.push(prodAtual);
+
+  // Se não parseou estruturado, mostrar trecho bruto organizado
+  if (!produtos.length || (produtos.length === 1 && produtos[0].nome === 'Extrato do catálogo')) {
+    renderTrechoLivre(trecho, arquivo, catalogos);
+    return;
+  }
+
+  var html = '<div class="prod-header">';
+  html += '<div><div class="prod-title">' + esc(arquivo || 'Catálogo') + '</div>';
+  html += '<div class="prod-subtitle">' + produtos.length + ' produto(s) encontrado(s) · ' + catalogos.length + ' catálogo(s) indexado(s)</div></div>';
+  html += '<div class="prod-filtro"><input type="text" placeholder="Filtrar produto..." id="filtro-prod" oninput="filtrarProd(this.value)"></div>';
+  html += '</div>';
+  html += '<div class="prod-grid" id="prod-grid">';
+  produtos.forEach(function(p, i) {
+    if (!p.nome) return;
+    html += '<div class="prod-card" data-nome="' + esc((p.nome + ' ' + p.codigo + ' ' + p.categoria + ' ' + p.descricao).toLowerCase()) + '">';
+    html += '<div class="prod-num">' + (i + 1) + '</div>';
+    html += '<div class="prod-body">';
+    html += '<div class="prod-nome-linha">';
+    html += '<span class="prod-nome-txt">' + esc(p.nome) + '</span>';
+    if (p.codigo) html += '<span class="prod-cod-tag">' + esc(p.codigo) + '</span>';
+    if (p.categoria) html += '<span class="prod-cat-tag">' + esc(p.categoria) + '</span>';
+    html += '</div>';
+    if (p.descricao) html += '<div class="prod-desc-txt">' + esc(p.descricao) + '</div>';
+    html += '<div class="prod-specs">';
+    if (p.bitola) html += '<span class="spec-chip destaque"><span class="spec-label">Bitola</span>' + esc(p.bitola) + '</span>';
+    if (p.tensao) html += '<span class="spec-chip destaque"><span class="spec-label">Tensão</span>' + esc(p.tensao) + '</span>';
+    if (p.material) html += '<span class="spec-chip"><span class="spec-label">Material</span>' + esc(p.material) + '</span>';
+    if (p.aplicacao) html += '<span class="spec-chip"><span class="spec-label">Aplicação</span>' + esc(p.aplicacao.substring(0,40)) + '</span>';
+    html += '</div></div>';
+    html += '<div class="prod-side">';
+    if (p.norma) html += '<div class="prod-norma-badge">📋 ' + esc(p.norma) + '</div>';
+    if (p.preco) html += '<div class="prod-preco">' + esc(p.preco) + '</div>';
+    if (p.unidade) html += '<div class="prod-unidade">por ' + esc(p.unidade) + '</div>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  document.getElementById('produtos-container').innerHTML = html;
+}
+
+function renderTrechoLivre(trecho, arquivo, catalogos) {
+  // Trecho não estruturado — mostrar organizado por parágrafos
+  var paragrafos = trecho.split(/
+
++/).filter(function(p) { return p.trim().length > 10; });
+  if (!paragrafos.length) paragrafos = [trecho];
+
+  var html = '<div class="prod-header">';
+  html += '<div><div class="prod-title">' + esc(arquivo || 'Catálogo indexado') + '</div>';
+  html += '<div class="prod-subtitle">' + catalogos.length + ' catálogo(s) · Use a Busca IA para pesquisar produtos específicos</div></div>';
+  html += '</div>';
+  html += '<div style="background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.12);border-radius:var(--r-lg);padding:18px 22px;margin-bottom:16px;">';
+  html += '<div style="font-size:0.78rem;font-weight:700;color:var(--accent);margin-bottom:8px;">💡 DICA — Para ver produtos organizados:</div>';
+  html += '<div style="font-size:0.83rem;color:var(--text2);line-height:1.6;">Use o <strong style="color:var(--text);">Prompt Mestre</strong> para extrair o catálogo em outra IA. O resultado estruturado aparece aqui com nome, código, bitola, tensão, norma e preço de cada produto.</div>';
+  html += '</div>';
+  paragrafos.slice(0, 8).forEach(function(p, i) {
+    html += '<div class="prod-card" style="grid-template-columns:auto 1fr;">';
+    html += '<div class="prod-num">' + (i + 1) + '</div>';
+    html += '<div class="prod-body"><div class="prod-desc-txt" style="font-size:0.88rem;">' + esc(p.trim()) + '</div></div>';
+    html += '</div>';
+  });
+  document.getElementById('produtos-container').innerHTML = html;
+}
+
+function filtrarProd(q) {
+  var cards = document.querySelectorAll('#prod-grid .prod-card');
+  var qLow = q.toLowerCase();
+  cards.forEach(function(card) {
+    var data = card.getAttribute('data-nome') || '';
+    card.style.display = (!q || data.includes(qLow)) ? '' : 'none';
+  });
 }
 
 function renderCatalogos(catalogos) {
