@@ -1,25 +1,27 @@
-// src/utils/db.js
+// src/utils/db.js — pool PostgreSQL (Supabase Transaction Pooler :6543)
+'use strict';
 const { Pool } = require('pg');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 20,
+  max: parseInt(process.env.DB_POOL_MAX || '8', 10),
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  // o Supabase pode demorar alguns segundos para responder na primeira conexão
+  connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT_MS || '15000', 10),
+  keepAlive: true
 });
 
 pool.on('error', (err) => {
-  console.error('Erro inesperado no pool de banco de dados:', err);
+  console.error('Erro inesperado no pool de banco de dados:', err.message);
 });
 
 async function query(text, params) {
   const start = Date.now();
   try {
     const res = await pool.query(text, params);
-    const duration = Date.now() - start;
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Query executada', { text: text.substring(0, 50), duration, rows: res.rowCount });
+    if (process.env.NODE_ENV === 'development' && process.env.DB_LOG === '1') {
+      console.log('Query', { text: text.substring(0, 60), ms: Date.now() - start, rows: res.rowCount });
     }
     return res;
   } catch (err) {
@@ -29,43 +31,43 @@ async function query(text, params) {
 }
 
 async function getClient() {
-  const client = await pool.connect();
-  const originalQuery = client.query.bind(client);
-  const release = client.release.bind(client);
-
-  const timeout = setTimeout(() => {
-    console.error('Cliente de banco de dados não liberado após 5 segundos');
-    console.error('Última query:', client.lastQuery);
-  }, 5000);
-
-  client.query = (...args) => {
-    client.lastQuery = args;
-    return originalQuery(...args);
-  };
-
-  client.release = () => {
-    clearTimeout(timeout);
-    client.query = originalQuery;
-    client.release = release;
-    return release();
-  };
-
-  return client;
+  return pool.connect();
 }
 
 async function transaction(callback) {
-  const client = await getClient();
+  const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const result = await callback(client);
     await client.query('COMMIT');
     return result;
   } catch (err) {
-    await client.query('ROLLBACK');
+    try { await client.query('ROLLBACK'); } catch (_) { /* conexão já perdida */ }
     throw err;
   } finally {
     client.release();
   }
 }
 
-module.exports = { query, getClient, transaction, pool };
+// INSERT de várias linhas em lotes (evita o limite de parâmetros do Postgres)
+async function inserirEmLote(executor, tabela, colunas, linhas, tamanhoLote) {
+  if (!linhas.length) return 0;
+  tamanhoLote = tamanhoLote || Math.max(1, Math.floor(3000 / colunas.length));
+  let total = 0;
+  for (let i = 0; i < linhas.length; i += tamanhoLote) {
+    const lote = linhas.slice(i, i + tamanhoLote);
+    const valores = [];
+    const marcadores = lote.map((linha, li) => {
+      return '(' + colunas.map((_, ci) => {
+        valores.push(linha[ci]);
+        return '$' + (li * colunas.length + ci + 1);
+      }).join(', ') + ')';
+    });
+    const sql = 'INSERT INTO ' + tabela + ' (' + colunas.join(', ') + ') VALUES ' + marcadores.join(', ');
+    const r = await executor.query(sql, valores);
+    total += r.rowCount;
+  }
+  return total;
+}
+
+module.exports = { query, getClient, transaction, inserirEmLote, pool };
