@@ -1,358 +1,250 @@
-// src/routes/fornecedores.js
+// src/routes/fornecedores.js — CRUD de fornecedores, produtos e catálogos (sempre filtrado pelo dono)
+'use strict';
 const express = require('express');
 const multer = require('multer');
-const { query, transaction } = require('../utils/db');
-const { requireAuth } = require('../middleware/auth');
-const { uploadFile, deleteFile } = require('../services/storage.service');
-const { processarPDF } = require('../services/pdf.service');
+const { query } = require('../utils/db');
+const { requireAuth, requireAcessoEscrita } = require('../middleware/auth');
+const indexacao = require('../services/indexacao.service');
+const { deleteFile } = require('../services/storage.service');
 
 const router = express.Router();
 
-// Multer em memória (sem disco)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: (parseInt(process.env.MAX_FILE_SIZE_MB) || 50) * 1024 * 1024 },
+  limits: { fileSize: (parseInt(process.env.MAX_FILE_SIZE_MB, 10) || 50) * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf') cb(null, true);
-    else cb(new Error('Apenas arquivos PDF são aceitos'));
+    else cb(Object.assign(new Error('Envie um arquivo PDF.'), { status: 400 }));
   }
 });
 
-// Todas as rotas requerem autenticação
-router.use(requireAuth);
+router.use(requireAuth, requireAcessoEscrita);
 
-// ─── GET /api/fornecedores ────────────────────────────────────────────────────
+function limpar(v, max) {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s ? s.slice(0, max || 255) : null;
+}
+
+function dadosFornecedor(body) {
+  const whatsapp = limpar(body.whatsapp, 50);
+  return {
+    nome: limpar(body.nome, 255),
+    email: limpar(body.email, 255),
+    telefone: limpar(body.telefone, 50),
+    whatsapp: whatsapp,
+    whatsapp_link: indexacao.waLink(whatsapp),
+    observacoes: limpar(body.observacoes, 2000)
+  };
+}
+
+function nomeArquivoUtf8(nome) {
+  let n = String(nome || 'catalogo.pdf');
+  if (/[ÃÂ]/.test(n)) { try { n = Buffer.from(n, 'latin1').toString('utf8'); } catch (_) { /* mantém */ } }
+  return n.slice(0, 255);
+}
+
+// Carrega o catálogo garantindo que pertence ao usuário logado (corrige IDOR)
+async function catalogoDoUsuario(fornecedorId, catalogoId, usuarioId) {
+  const r = await query(
+    'SELECT c.* FROM catalogos c JOIN fornecedores f ON f.id = c.fornecedor_id' +
+    ' WHERE c.id = $1 AND c.fornecedor_id = $2 AND f.usuario_id = $3 AND f.ativo = 1',
+    [catalogoId, fornecedorId, usuarioId]);
+  return r.rows[0] || null;
+}
+
+// GET /api/fornecedores
 router.get('/', async (req, res) => {
   try {
-    const { busca, pagina = 1, por_pagina = 20 } = req.query;
-    const offset = (parseInt(pagina) - 1) * parseInt(por_pagina);
-
-    let whereClause = 'WHERE f.usuario_id = $1 AND f.ativo = 1';
+    const busca = limpar(req.query.busca, 100);
+    const pagina = Math.max(1, parseInt(req.query.pagina, 10) || 1);
+    const porPagina = Math.min(200, Math.max(1, parseInt(req.query.por_pagina, 10) || 100));
     const params = [req.usuario.id];
-
+    let where = 'WHERE f.usuario_id = $1 AND f.ativo = 1';
     if (busca) {
-      params.push(`%${busca}%`);
-      whereClause += ` AND (f.nome ILIKE $${params.length} OR f.email ILIKE $${params.length} OR f.telefone ILIKE $${params.length})`;
+      params.push('%' + busca.replace(/[\\%_]/g, '\\$&') + '%');
+      where += ' AND (f.nome ILIKE $2 OR f.email ILIKE $2 OR f.telefone ILIKE $2 OR f.whatsapp ILIKE $2 OR f.observacoes ILIKE $2)';
     }
-
-    const [dataResult, countResult] = await Promise.all([
+    const [dados, total] = await Promise.all([
       query(
-        `SELECT 
-          f.id, f.nome, f.email, f.telefone, f.whatsapp, f.observacoes,
-          f.criado_em, f.atualizado_em,
-          COUNT(DISTINCT cat.id) FILTER (WHERE cat.status = 'processado') as total_catalogos,
-          COUNT(DISTINCT c.id) as total_chunks
-        FROM fornecedores f
-        LEFT JOIN catalogos cat ON cat.fornecedor_id = f.id
-        LEFT JOIN chunks c ON c.fornecedor_id = f.id
-        ${whereClause}
-        GROUP BY f.id
-        ORDER BY f.nome ASC
-        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-        [...params, por_pagina, offset]
-      ),
-      query(
-        `SELECT COUNT(*) as total FROM fornecedores f ${whereClause}`,
-        params
-      )
+        'SELECT f.id, f.nome, f.email, f.telefone, f.whatsapp, f.whatsapp_link, f.observacoes, f.criado_em, f.atualizado_em,' +
+        " (SELECT count(*) FROM catalogos c WHERE c.fornecedor_id = f.id AND c.status = 'processado')::int AS total_catalogos," +
+        ' (SELECT count(*) FROM chunks ch WHERE ch.fornecedor_id = f.id)::int AS total_chunks,' +
+        ' (SELECT count(*) FROM produtos p WHERE p.fornecedor_id = f.id)::int AS total_produtos' +
+        ' FROM fornecedores f ' + where + ' ORDER BY lower(f.nome) ASC' +
+        ' LIMIT ' + porPagina + ' OFFSET ' + ((pagina - 1) * porPagina), params),
+      query('SELECT count(*)::int AS total FROM fornecedores f ' + where, params)
     ]);
-
-    res.json({
-      fornecedores: dataResult.rows.map(f => ({
-        ...f,
-        total_catalogos: parseInt(f.total_catalogos) || 0,
-        total_chunks: parseInt(f.total_chunks) || 0
-      })),
-      total: parseInt(countResult.rows[0].total),
-      pagina: parseInt(pagina),
-      por_pagina: parseInt(por_pagina)
-    });
+    res.json({ fornecedores: dados.rows, total: total.rows[0].total, pagina: pagina, por_pagina: porPagina });
   } catch (err) {
-    console.error('Erro ao listar fornecedores:', err);
-    res.status(500).json({ error: 'Erro ao buscar fornecedores' });
+    console.error('Erro ao listar fornecedores:', err.message);
+    res.status(500).json({ error: 'Erro ao carregar fornecedores' });
   }
 });
 
-// ─── POST /api/fornecedores ───────────────────────────────────────────────────
+// POST /api/fornecedores (JSON; aceita também multipart com PDF no campo "catalogo")
 router.post('/', upload.single('catalogo'), async (req, res) => {
   try {
-    const { nome, email, telefone, whatsapp, observacoes } = req.body;
-
-    if (!nome || !nome.trim()) {
-      return res.status(400).json({ error: 'Nome do fornecedor é obrigatório' });
-    }
-
-    const whatsappLink = whatsapp
-      ? `https://wa.me/55${whatsapp.replace(/\D/g, '')}`
-      : null;
-
-    const result = await query(
-      `INSERT INTO fornecedores (usuario_id, nome, email, telefone, whatsapp, whatsapp_link, observacoes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [req.usuario.id, nome.trim(), email || null, telefone || null, whatsapp || null, whatsappLink, observacoes || null]
-    );
-
-    const fornecedor = result.rows[0];
-
-    // Se enviou PDF junto, processar
+    const d = dadosFornecedor(req.body);
+    if (!d.nome) return res.status(400).json({ error: 'Informe o nome do fornecedor.' });
+    const r = await query(
+      'INSERT INTO fornecedores (usuario_id, nome, email, telefone, whatsapp, whatsapp_link, observacoes) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [req.usuario.id, d.nome, d.email, d.telefone, d.whatsapp, d.whatsapp_link, d.observacoes]);
+    const fornecedor = r.rows[0];
+    let catalogo = null;
     if (req.file) {
-      processarCatalogo(fornecedor.id, req.file).catch(console.error);
+      try {
+        const pdf = await indexacao.extrairTextoPDF(req.file.buffer);
+        catalogo = await indexacao.indexarTexto({ usuarioId: req.usuario.id, fornecedorId: fornecedor.id, texto: pdf.texto,
+          paginas: pdf.paginas, origem: 'pdf_servidor', nomeArquivo: nomeArquivoUtf8(req.file.originalname) });
+      } catch (err) { catalogo = { erro: err.amigavel ? err.message : 'Não foi possível ler o PDF.' }; }
     }
-
-    res.status(201).json({ ok: true, fornecedor });
+    res.status(201).json({ ok: true, fornecedor: fornecedor, catalogo: catalogo });
   } catch (err) {
-    console.error('Erro ao criar fornecedor:', err);
-    res.status(500).json({ error: 'Erro ao criar fornecedor' });
+    console.error('Erro ao criar fornecedor:', err.message);
+    res.status(500).json({ error: 'Erro ao salvar o fornecedor' });
   }
 });
 
-// ─── GET /api/fornecedores/:id ────────────────────────────────────────────────
+// GET /api/fornecedores/:id
 router.get('/:id', async (req, res) => {
   try {
-    const [fornResult, catResult] = await Promise.all([
-      query(
-        'SELECT * FROM fornecedores WHERE id = $1 AND usuario_id = $2 AND ativo = 1',
-        [req.params.id, req.usuario.id]
-      ),
-      query(
-        `SELECT id, nome_arquivo, paginas, status, erro, criado_em, atualizado_em,
-          (SELECT COUNT(*) FROM chunks WHERE catalogo_id = catalogos.id) as total_chunks
-        FROM catalogos WHERE fornecedor_id = $1 ORDER BY criado_em DESC`,
-        [req.params.id]
-      )
-    ]);
-
-    if (fornResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Fornecedor não encontrado' });
-    }
-
-    res.json({
-      ...fornResult.rows[0],
-      catalogos: catResult.rows.map(c => ({
-        ...c,
-        total_chunks: parseInt(c.total_chunks) || 0
-      }))
-    });
+    const f = await query('SELECT * FROM fornecedores WHERE id = $1 AND usuario_id = $2 AND ativo = 1', [req.params.id, req.usuario.id]);
+    if (!f.rows.length) return res.status(404).json({ error: 'Fornecedor não encontrado' });
+    const cats = await query(
+      'SELECT id, nome_arquivo, paginas, status, erro, origem, formato, total_produtos, ia_status, ia_info, criado_em, atualizado_em,' +
+      ' (SELECT count(*) FROM chunks WHERE catalogo_id = catalogos.id)::int AS total_chunks,' +
+      ' (SELECT count(*) FROM produtos WHERE catalogo_id = catalogos.id)::int AS produtos_gravados' +
+      ' FROM catalogos WHERE fornecedor_id = $1 ORDER BY criado_em DESC', [req.params.id]);
+    const total = await query('SELECT count(*)::int AS n FROM produtos WHERE fornecedor_id = $1', [req.params.id]);
+    res.json(Object.assign({}, f.rows[0], { catalogos: cats.rows, total_produtos: total.rows[0].n }));
   } catch (err) {
-    console.error('Erro ao buscar fornecedor:', err);
-    res.status(500).json({ error: 'Erro interno' });
+    console.error('Erro ao buscar fornecedor:', err.message);
+    res.status(500).json({ error: 'Erro ao carregar o fornecedor' });
   }
 });
 
-// ─── PUT /api/fornecedores/:id ────────────────────────────────────────────────
+// GET /api/fornecedores/:id/produtos
+router.get('/:id/produtos', async (req, res) => {
+  try {
+    const f = await query('SELECT id FROM fornecedores WHERE id = $1 AND usuario_id = $2 AND ativo = 1', [req.params.id, req.usuario.id]);
+    if (!f.rows.length) return res.status(404).json({ error: 'Fornecedor não encontrado' });
+    const r = await query(
+      'SELECT p.id, p.catalogo_id, p.ordem, p.nome, p.codigo, p.marca, p.categoria, p.descricao, p.bitola, p.tensao, p.material,' +
+      ' p.isolamento, p.cobertura, p.temperatura, p.aplicacao, p.norma, p.certificacoes, p.preco, p.unidade, p.atributos, p.origem,' +
+      ' c.nome_arquivo FROM produtos p LEFT JOIN catalogos c ON c.id = p.catalogo_id' +
+      ' WHERE p.fornecedor_id = $1 AND p.usuario_id = $2 ORDER BY p.catalogo_id DESC, p.ordem ASC LIMIT 10000',
+      [req.params.id, req.usuario.id]);
+    res.json({ produtos: r.rows, total: r.rows.length });
+  } catch (err) {
+    console.error('Erro ao listar produtos:', err.message);
+    res.status(500).json({ error: 'Erro ao carregar os produtos' });
+  }
+});
+
+// PUT /api/fornecedores/:id
 router.put('/:id', async (req, res) => {
   try {
-    const { nome, email, telefone, whatsapp, observacoes } = req.body;
-
-    // Verificar ownership
-    const check = await query(
-      'SELECT id FROM fornecedores WHERE id = $1 AND usuario_id = $2 AND ativo = 1',
-      [req.params.id, req.usuario.id]
-    );
-    if (check.rows.length === 0) {
-      return res.status(404).json({ error: 'Fornecedor não encontrado' });
-    }
-
-    const whatsappLink = whatsapp
-      ? `https://wa.me/55${whatsapp.replace(/\D/g, '')}`
-      : null;
-
-    const result = await query(
-      `UPDATE fornecedores SET
-        nome = COALESCE($1, nome),
-        email = $2,
-        telefone = $3,
-        whatsapp = $4,
-        whatsapp_link = $5,
-        observacoes = $6,
-        atualizado_em = NOW()
-       WHERE id = $7 AND usuario_id = $8
-       RETURNING *`,
-      [nome?.trim(), email || null, telefone || null, whatsapp || null, whatsappLink, observacoes || null, req.params.id, req.usuario.id]
-    );
-
-    res.json({ ok: true, fornecedor: result.rows[0] });
+    const d = dadosFornecedor(req.body);
+    if (!d.nome) return res.status(400).json({ error: 'Informe o nome do fornecedor.' });
+    const r = await query(
+      'UPDATE fornecedores SET nome = $1, email = $2, telefone = $3, whatsapp = $4, whatsapp_link = $5, observacoes = $6, atualizado_em = NOW()' +
+      ' WHERE id = $7 AND usuario_id = $8 AND ativo = 1 RETURNING *',
+      [d.nome, d.email, d.telefone, d.whatsapp, d.whatsapp_link, d.observacoes, req.params.id, req.usuario.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Fornecedor não encontrado' });
+    res.json({ ok: true, fornecedor: r.rows[0] });
   } catch (err) {
-    console.error('Erro ao atualizar fornecedor:', err);
-    res.status(500).json({ error: 'Erro interno' });
+    console.error('Erro ao atualizar fornecedor:', err.message);
+    res.status(500).json({ error: 'Erro ao salvar o fornecedor' });
   }
 });
 
-// ─── DELETE /api/fornecedores/:id ─────────────────────────────────────────────
+// DELETE /api/fornecedores/:id (exclusão lógica)
 router.delete('/:id', async (req, res) => {
   try {
-    const result = await query(
-      'UPDATE fornecedores SET ativo = 0, atualizado_em = NOW() WHERE id = $1 AND usuario_id = $2 RETURNING id',
-      [req.params.id, req.usuario.id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Fornecedor não encontrado' });
-    }
+    const r = await query('UPDATE fornecedores SET ativo = 0, atualizado_em = NOW() WHERE id = $1 AND usuario_id = $2 AND ativo = 1 RETURNING id',
+      [req.params.id, req.usuario.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Fornecedor não encontrado' });
     res.json({ ok: true });
   } catch (err) {
-    console.error('Erro ao excluir fornecedor:', err);
-    res.status(500).json({ error: 'Erro interno' });
+    console.error('Erro ao excluir fornecedor:', err.message);
+    res.status(500).json({ error: 'Erro ao excluir o fornecedor' });
   }
 });
 
-// ─── POST /api/fornecedores/:id/catalogo ─────────────────────────────────────
+// POST /api/fornecedores/:id/catalogo (legado: PDF no campo "catalogo", lido no servidor)
 router.post('/:id/catalogo', upload.single('catalogo'), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'Arquivo PDF obrigatório' });
-    }
-
-    // Verificar ownership
-    const check = await query(
-      'SELECT id FROM fornecedores WHERE id = $1 AND usuario_id = $2 AND ativo = 1',
-      [req.params.id, req.usuario.id]
-    );
-    if (check.rows.length === 0) {
-      return res.status(404).json({ error: 'Fornecedor não encontrado' });
-    }
-
-    // Criar registro do catálogo
-    const catResult = await query(
-      `INSERT INTO catalogos (fornecedor_id, nome_arquivo, status)
-       VALUES ($1, $2, 'pendente')
-       RETURNING id`,
-      [req.params.id, req.file.originalname]
-    );
-    const catalogoId = catResult.rows[0].id;
-
-    // Processar em background (não await)
-    processarCatalogo(req.params.id, req.file, catalogoId).catch(console.error);
-
-    res.status(202).json({
-      ok: true,
-      catalogo_id: catalogoId,
-      msg: 'PDF recebido. Processando em background...'
-    });
+    if (!req.file) return res.status(400).json({ error: 'Envie o arquivo PDF.' });
+    const pdf = await indexacao.extrairTextoPDF(req.file.buffer);
+    const out = await indexacao.indexarTexto({ usuarioId: req.usuario.id, fornecedorId: req.params.id, texto: pdf.texto,
+      paginas: pdf.paginas, origem: 'pdf_servidor', nomeArquivo: nomeArquivoUtf8(req.file.originalname) });
+    res.status(201).json(Object.assign({ ok: true }, out));
   } catch (err) {
-    console.error('Erro ao receber catálogo:', err);
-    res.status(500).json({ error: 'Erro interno' });
+    if (err.amigavel) return res.status(err.status).json({ error: err.message });
+    console.error('Erro ao receber catálogo:', err.message);
+    res.status(500).json({ error: 'Não foi possível ler o PDF.' });
   }
 });
 
-// ─── GET /api/fornecedores/:id/catalogo/:cid/status ──────────────────────────
+// GET /api/fornecedores/:id/catalogo/:cid/status
 router.get('/:id/catalogo/:cid/status', async (req, res) => {
   try {
-    const result = await query(
-      `SELECT c.id, c.status, c.paginas, c.erro, c.atualizado_em,
-        COUNT(ch.id) as total_chunks
-       FROM catalogos c
-       LEFT JOIN chunks ch ON ch.catalogo_id = c.id
-       WHERE c.id = $1 AND c.fornecedor_id = $2
-       GROUP BY c.id`,
-      [req.params.cid, req.params.id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Catálogo não encontrado' });
-    }
-
-    const cat = result.rows[0];
-    res.json({
-      id: cat.id,
-      status: cat.status,
-      paginas: cat.paginas,
-      erro: cat.erro,
-      total_chunks: parseInt(cat.total_chunks) || 0,
-      atualizado_em: cat.atualizado_em
-    });
+    const c = await catalogoDoUsuario(req.params.id, req.params.cid, req.usuario.id);
+    if (!c) return res.status(404).json({ error: 'Catálogo não encontrado' });
+    const n = await query('SELECT (SELECT count(*) FROM chunks WHERE catalogo_id = $1)::int AS chunks, (SELECT count(*) FROM produtos WHERE catalogo_id = $1)::int AS produtos', [c.id]);
+    res.json({ id: c.id, status: c.status, paginas: c.paginas, erro: c.erro, ia_status: c.ia_status, ia_info: c.ia_info,
+      total_chunks: n.rows[0].chunks, total_produtos: n.rows[0].produtos, atualizado_em: c.atualizado_em });
   } catch (err) {
     res.status(500).json({ error: 'Erro interno' });
   }
 });
 
-// ─── POST /api/fornecedores/:id/catalogo/:cid/reprocessar ────────────────────
+// POST /api/fornecedores/:id/catalogo/:cid/reprocessar — relê o texto salvo (não precisa do PDF)
 router.post('/:id/catalogo/:cid/reprocessar', async (req, res) => {
   try {
-    const result = await query(
-      'SELECT * FROM catalogos WHERE id = $1 AND fornecedor_id = $2',
-      [req.params.cid, req.params.id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Catálogo não encontrado' });
+    const c = await catalogoDoUsuario(req.params.id, req.params.cid, req.usuario.id);
+    if (!c) return res.status(404).json({ error: 'Catálogo não encontrado' });
+    if (!c.texto_extraido || c.texto_extraido.trim().length < 20) {
+      return res.status(400).json({ error: 'Este catálogo não tem texto salvo. Envie o arquivo novamente.' });
     }
-
-    const catalogo = result.rows[0];
-    if (!catalogo.storage_path) {
-      return res.status(400).json({ error: 'Arquivo não encontrado no storage para reprocessar' });
-    }
-
-    // Reprocessar em background
-    processarPDF(catalogo.id, catalogo.storage_path).catch(console.error);
-
-    res.json({ ok: true, msg: 'Reprocessamento iniciado' });
+    const out = await indexacao.indexarTexto({ usuarioId: req.usuario.id, fornecedorId: c.fornecedor_id, catalogoId: c.id,
+      texto: c.texto_extraido, paginas: c.paginas, origem: c.origem || 'reprocessado', nomeArquivo: c.nome_arquivo });
+    res.json(Object.assign({ ok: true, msg: 'Catálogo reprocessado' }, out));
   } catch (err) {
-    res.status(500).json({ error: 'Erro interno' });
+    if (err.amigavel) return res.status(err.status).json({ error: err.message });
+    console.error('Erro ao reprocessar:', err.message);
+    res.status(500).json({ error: 'Erro ao reprocessar' });
   }
 });
 
-// ─── DELETE /api/fornecedores/:id/catalogo/:cid ───────────────────────────────
+// POST /api/fornecedores/:id/catalogo/:cid/estruturar — pede à IA para montar a tabela de produtos
+router.post('/:id/catalogo/:cid/estruturar', async (req, res) => {
+  try {
+    const c = await catalogoDoUsuario(req.params.id, req.params.cid, req.usuario.id);
+    if (!c) return res.status(404).json({ error: 'Catálogo não encontrado' });
+    if (!c.texto_extraido) return res.status(400).json({ error: 'Este catálogo não tem texto salvo.' });
+    if (!require('../services/ai.service').configurada()) return res.status(503).json({ error: 'A IA não está configurada no servidor.' });
+    await indexacao.agendarEstruturacao(c.id);
+    res.status(202).json({ ok: true, msg: 'A IA começou a estruturar os produtos. Isso pode levar alguns minutos.' });
+  } catch (err) {
+    console.error('Erro ao estruturar:', err.message);
+    res.status(500).json({ error: 'Erro ao iniciar a estruturação' });
+  }
+});
+
+// DELETE /api/fornecedores/:id/catalogo/:cid
 router.delete('/:id/catalogo/:cid', async (req, res) => {
   try {
-    const result = await query(
-      'SELECT * FROM catalogos WHERE id = $1 AND fornecedor_id = $2',
-      [req.params.cid, req.params.id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Catálogo não encontrado' });
-    }
-
-    const catalogo = result.rows[0];
-
-    // Deletar do storage
-    if (catalogo.storage_path) {
-      await deleteFile(catalogo.storage_path).catch(console.error);
-    }
-
-    // Deletar chunks e catálogo
-    await query('DELETE FROM chunks WHERE catalogo_id = $1', [catalogo.id]);
-    await query('DELETE FROM catalogos WHERE id = $1', [catalogo.id]);
-
+    const c = await catalogoDoUsuario(req.params.id, req.params.cid, req.usuario.id);
+    if (!c) return res.status(404).json({ error: 'Catálogo não encontrado' });
+    if (c.storage_path) await deleteFile(c.storage_path).catch(function () {});
+    await query('DELETE FROM catalogos WHERE id = $1', [c.id]); // chunks e produtos saem em cascata
     res.json({ ok: true });
   } catch (err) {
-    console.error('Erro ao deletar catálogo:', err);
-    res.status(500).json({ error: 'Erro interno' });
+    console.error('Erro ao excluir catálogo:', err.message);
+    res.status(500).json({ error: 'Erro ao excluir o catálogo' });
   }
 });
-
-// ─── Helper interno ───────────────────────────────────────────────────────────
-async function processarCatalogo(fornecedorId, file, catalogoId = null) {
-  try {
-    // 1. Upload para R2
-    const { key } = await uploadFile(file.buffer, file.originalname, file.mimetype);
-
-    // 2. Se não tem catalogoId, criar registro
-    if (!catalogoId) {
-      const result = await query(
-        `INSERT INTO catalogos (fornecedor_id, nome_arquivo, storage_path, status)
-         VALUES ($1, $2, $3, 'pendente') RETURNING id`,
-        [fornecedorId, file.originalname, key]
-      );
-      catalogoId = result.rows[0].id;
-    } else {
-      await query(
-        'UPDATE catalogos SET storage_path = $1 WHERE id = $2',
-        [key, catalogoId]
-      );
-    }
-
-    // 3. Processar PDF
-    await processarPDF(catalogoId, key);
-  } catch (err) {
-    console.error('Erro no pipeline de catálogo:', err);
-    if (catalogoId) {
-      await query(
-        'UPDATE catalogos SET status = $1, erro = $2 WHERE id = $3',
-        ['erro', err.message, catalogoId]
-      );
-    }
-  }
-}
 
 module.exports = router;

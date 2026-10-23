@@ -1,6 +1,6 @@
 // src/services/storage.service.js — Supabase Storage
 const { createClient } = require('@supabase/supabase-js');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const path = require('path');
 
 let supabase = null;
@@ -18,7 +18,7 @@ function getClient() {
 async function uploadFile(buffer, originalName, mimeType, folder) {
   folder = folder || 'catalogos';
   const ext = path.extname(originalName).toLowerCase();
-  const key = folder + '/' + uuidv4() + ext;
+  const key = folder + '/' + crypto.randomUUID() + ext;
 
   const { data, error } = await getClient()
     .storage

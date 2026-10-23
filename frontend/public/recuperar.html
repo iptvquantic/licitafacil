@@ -7,7 +7,7 @@
   <title>Recuperar senha — LicitaFácil</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap">
-  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/app.css?v=20261023">
   <style>
     body { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:16px; }
     .auth-container { width:100%; max-width:400px; display:flex; flex-direction:column; gap:20px; }
@@ -37,7 +37,7 @@
 
     <div class="auth-card" id="card-recuperar">
       <h1 class="auth-title">Recuperar senha</h1>
-      <p class="auth-subtitle">Informe seu email e enviaremos as instruções</p>
+      <p class="auth-subtitle">Informe o e-mail da sua conta para receber o link de nova senha</p>
 
       <form class="auth-form" id="form-recuperar">
         <div class="form-group">
@@ -51,9 +51,9 @@
 
     <div class="auth-card hidden" id="card-sucesso">
       <div class="success-box">
-        <div class="success-icon">📧</div>
-        <div class="success-title">Email enviado!</div>
-        <div class="success-text">Se o email estiver cadastrado, você receberá as instruções em instantes. Verifique também sua caixa de spam.</div>
+        <div class="success-icon" aria-hidden="true">✓</div>
+        <div class="success-title">Pedido recebido</div>
+        <div class="success-text">Se o e-mail estiver cadastrado, o link para criar uma nova senha chega em alguns minutos (confira também o spam). Se não chegar, peça o link ao suporte do LicitaFácil.</div>
       </div>
       <div style="margin-top:16px;text-align:center;">
         <a href="login.html" class="btn btn-secondary">Voltar ao login</a>
@@ -65,7 +65,7 @@
     </div>
   </div>
 
-  <script src="js/utils.js"></script>
+  <script src="js/utils.js?v=20261023"></script>
   <script>
     document.getElementById('form-recuperar').addEventListener('submit', function(e) {
       e.preventDefault();

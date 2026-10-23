@@ -1,294 +1,84 @@
-// src/routes/extracao.js — Extração IA de catálogos com Claude Vision
+// src/routes/extracao.js — entrada de catálogos (texto lido no navegador, texto colado ou PDF lido no servidor)
+'use strict';
 const express = require('express');
 const multer = require('multer');
-const fetch = require('node-fetch');
-const { requireAuth } = require('../middleware/auth');
 const { query } = require('../utils/db');
-const { uploadFile, getFileBuffer } = require('../services/storage.service');
+const { requireAuth, requireAcesso } = require('../middleware/auth');
+const indexacao = require('../services/indexacao.service');
 
 const router = express.Router();
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: (parseInt(process.env.MAX_FILE_SIZE_MB, 10) || 50) * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const ok = ['application/pdf','image/jpeg','image/jpg','image/png','image/webp'].includes(file.mimetype);
-    ok ? cb(null, true) : cb(new Error('Formato não suportado. Use PDF, JPG, PNG ou WEBP.'));
+    const ok = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'].indexOf(file.mimetype) >= 0;
+    ok ? cb(null, true) : cb(Object.assign(new Error('Formato não suportado. Use PDF, JPG, PNG ou WEBP.'), { status: 400 }));
   }
 });
 
-router.use(requireAuth);
+router.use(requireAuth, requireAcesso);
 
-// POST /api/extracao/catalogo/:fornecedorId
+function nomeArquivoUtf8(nome) {
+  let n = String(nome || 'catalogo.pdf');
+  if (/[ÃÂ]/.test(n)) { try { n = Buffer.from(n, 'latin1').toString('utf8'); } catch (_) { /* mantém */ } }
+  return n.slice(0, 255);
+}
+
+// POST /api/extracao/texto/:fornecedorId  { texto, nome_arquivo, origem, paginas }
+router.post('/texto/:fornecedorId', async (req, res) => {
+  try {
+    const out = await indexacao.indexarTexto({
+      usuarioId: req.usuario.id,
+      fornecedorId: req.params.fornecedorId,
+      texto: req.body.texto,
+      nomeArquivo: req.body.nome_arquivo,
+      origem: ['texto_colado', 'pdf_navegador', 'ocr_navegador', 'imagem_ocr'].indexOf(req.body.origem) >= 0 ? req.body.origem : 'texto_colado',
+      paginas: req.body.paginas
+    });
+    res.status(201).json(Object.assign({ ok: true }, out));
+  } catch (err) {
+    if (err.amigavel) return res.status(err.status).json({ error: err.message });
+    console.error('Erro ao indexar texto:', err.message);
+    res.status(500).json({ error: 'Não foi possível indexar o catálogo agora. Tente de novo.' });
+  }
+});
+
+// POST /api/extracao/catalogo/:fornecedorId (multipart "arquivo") — leitura no servidor, sem guardar o arquivo
 router.post('/catalogo/:fornecedorId', upload.single('arquivo'), async (req, res) => {
   try {
-    const { fornecedorId } = req.params;
-
-    // Verificar ownership
-    const forn = await query(
-      'SELECT id, nome FROM fornecedores WHERE id = $1 AND usuario_id = $2 AND ativo = 1',
-      [fornecedorId, req.usuario.id]
-    );
-    if (forn.rows.length === 0) return res.status(404).json({ error: 'Fornecedor não encontrado' });
-
-    if (!req.file) return res.status(400).json({ error: 'Arquivo obrigatório' });
-
-    // Upload para storage
-    const { key, url } = await uploadFile(req.file.buffer, req.file.originalname, req.file.mimetype);
-
-    // Criar registro do catálogo
-    const catResult = await query(
-      'INSERT INTO catalogos (fornecedor_id, nome_arquivo, storage_path, status) VALUES ($1, $2, $3, $4) RETURNING id',
-      [fornecedorId, req.file.originalname, key, 'processando']
-    );
-    const catalogoId = catResult.rows[0].id;
-
-    // Responder imediatamente — processar em background
-    res.status(202).json({ ok: true, catalogo_id: catalogoId, msg: 'Arquivo recebido. Extração IA iniciada...' });
-
-    // Processar em background
-    extrairComIA(catalogoId, fornecedorId, req.file.buffer, req.file.mimetype, req.file.originalname, req.usuario.id)
-      .catch(err => {
-        console.error('Erro na extração IA:', err);
-        query('UPDATE catalogos SET status = $1, erro = $2 WHERE id = $3', ['erro', err.message, catalogoId]);
-      });
-
+    if (!req.file) return res.status(400).json({ error: 'Envie o arquivo.' });
+    if (req.file.mimetype.indexOf('image/') === 0) {
+      return res.status(422).json({ error: 'Imagens precisam de leitura com OCR, feita no seu navegador. Recarregue a página (Ctrl+F5) e envie de novo.', code: 'PRECISA_OCR' });
+    }
+    const pdf = await indexacao.extrairTextoPDF(req.file.buffer);
+    if (!pdf.texto || pdf.texto.trim().length < 20) {
+      return res.status(422).json({ error: 'Este PDF é escaneado (só imagem). Recarregue a página e envie de novo para ler com OCR no navegador.', code: 'PRECISA_OCR' });
+    }
+    const out = await indexacao.indexarTexto({ usuarioId: req.usuario.id, fornecedorId: req.params.fornecedorId, texto: pdf.texto,
+      paginas: pdf.paginas, origem: 'pdf_servidor', nomeArquivo: nomeArquivoUtf8(req.file.originalname) });
+    res.status(201).json(Object.assign({ ok: true }, out));
   } catch (err) {
-    console.error('Erro ao iniciar extração:', err);
-    res.status(500).json({ error: err.message });
+    if (err.amigavel) return res.status(err.status).json({ error: err.message });
+    console.error('Erro na extração no servidor:', err.message);
+    res.status(500).json({ error: 'Não foi possível ler este PDF. Se for protegido por senha, salve uma cópia sem senha.' });
   }
 });
 
 // GET /api/extracao/catalogo/:fornecedorId/:catalogoId/status
 router.get('/catalogo/:fornecedorId/:catalogoId/status', async (req, res) => {
   try {
-    const result = await query(
-      `SELECT c.id, c.status, c.paginas, c.erro, c.atualizado_em,
-        COUNT(ch.id) as total_chunks,
-        c.texto_extraido
-       FROM catalogos c
-       LEFT JOIN chunks ch ON ch.catalogo_id = c.id
-       WHERE c.id = $1 AND c.fornecedor_id = $2
-       GROUP BY c.id`,
-      [req.params.catalogoId, req.params.fornecedorId]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Catálogo não encontrado' });
-    const cat = result.rows[0];
-    res.json({
-      id: cat.id, status: cat.status, paginas: cat.paginas, erro: cat.erro,
-      total_chunks: parseInt(cat.total_chunks) || 0,
-      tem_dados: !!(cat.texto_extraido && cat.texto_extraido.length > 100),
-      atualizado_em: cat.atualizado_em
-    });
+    const r = await query(
+      'SELECT c.id, c.status, c.paginas, c.erro, c.ia_status, c.ia_info, c.atualizado_em,' +
+      ' (SELECT count(*) FROM chunks WHERE catalogo_id = c.id)::int AS total_chunks,' +
+      ' (SELECT count(*) FROM produtos WHERE catalogo_id = c.id)::int AS total_produtos' +
+      ' FROM catalogos c JOIN fornecedores f ON f.id = c.fornecedor_id' +
+      ' WHERE c.id = $1 AND c.fornecedor_id = $2 AND f.usuario_id = $3', [req.params.catalogoId, req.params.fornecedorId, req.usuario.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Catálogo não encontrado' });
+    res.json(r.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno' });
   }
 });
-
-// ─── Extração com IA ─────────────────────────────────────────────────────────
-
-const PROMPT_EXTRACAO = `Você é um especialista em extração de dados de catálogos de fornecedores.
-Analise o arquivo enviado e extraia TODOS os produtos, informações do fornecedor e detalhes técnicos.
-
-REGRAS:
-- Extraia TODOS os produtos sem exceção
-- Preserve medidas EXATAMENTE como aparecem
-- Capture códigos, SKUs, referências
-- Capture materiais, cores, variações, acabamentos
-- Capture preços e unidades de venda
-- Identifique nome do fornecedor, CNPJ, contatos
-- Nunca invente dados
-- Responda APENAS com JSON válido, sem markdown
-
-FORMATO:
-{
-  "supplier": {
-    "name": "Nome do fornecedor ou null",
-    "cnpj": "CNPJ ou null",
-    "website": "site ou null",
-    "email": "email ou null",
-    "phone": "telefone ou null",
-    "address": "endereço ou null",
-    "categories": ["categoria1"],
-    "description": "descrição do fornecedor"
-  },
-  "products": [
-    {
-      "name": "Nome completo do produto",
-      "code": "código/SKU ou null",
-      "category": "categoria",
-      "description": "descrição técnica completa",
-      "dimensions": {"raw": "medidas originais ou null"},
-      "material": "material ou null",
-      "color": "cor ou null",
-      "price": "preço ou null",
-      "unit": "unidade de venda ou null",
-      "notes": "observações ou null"
-    }
-  ],
-  "total_products": 0,
-  "extraction_notes": "observações sobre a extração"
-}`;
-
-async function extrairComIA(catalogoId, fornecedorId, buffer, mimetype, filename, usuarioId) {
-  try {
-    let textoExtraido = '';
-    let dadosIA = null;
-    let paginas = 0;
-
-    // Converter buffer para base64
-    const base64 = buffer.toString('base64');
-    const isPDF = mimetype === 'application/pdf';
-
-    // Montar mensagem para Claude
-    const mensagem = isPDF
-      ? { role: 'user', content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
-          { type: 'text', text: PROMPT_EXTRACAO }
-        ]}
-      : { role: 'user', content: [
-          { type: 'image', source: { type: 'base64', media_type: mimetype, data: base64 } },
-          { type: 'text', text: PROMPT_EXTRACAO }
-        ]};
-
-    // Usar OpenRouter Vision (gratuito)
-    const { extrairComOpenRouter } = require('../services/extracao-ia.service');
-    const resultIA = await extrairComOpenRouter(buffer, mimetype);
-    const textoResposta = resultIA.texto || '';
-    if (resultIA.dadosIA) dadosIA = resultIA.dadosIA;
-
-    // Parsear JSON da resposta
-    try {
-      const jsonMatch = textoResposta.match(/\{[\s\S]*\}/);
-      if (jsonMatch) dadosIA = JSON.parse(jsonMatch[0]);
-    } catch (e) {
-      dadosIA = null;
-    }
-
-    // Montar texto extraído para busca
-    if (dadosIA) {
-      const partes = [];
-      if (dadosIA.supplier) {
-        partes.push('FORNECEDOR: ' + (dadosIA.supplier.name || ''));
-        if (dadosIA.supplier.description) partes.push(dadosIA.supplier.description);
-        if (dadosIA.supplier.categories) partes.push('Categorias: ' + dadosIA.supplier.categories.join(', '));
-      }
-      if (dadosIA.products && Array.isArray(dadosIA.products)) {
-        dadosIA.products.forEach(function(p) {
-          var linha = p.name || '';
-          if (p.code) linha += ' [' + p.code + ']';
-          if (p.description) linha += ' - ' + p.description;
-          if (p.material) linha += ' - Material: ' + p.material;
-          if (p.dimensions && p.dimensions.raw) linha += ' - Dim: ' + p.dimensions.raw;
-          if (p.price) linha += ' - Preço: ' + p.price;
-          partes.push(linha);
-        });
-        paginas = Math.ceil(dadosIA.products.length / 10);
-      }
-      textoExtraido = partes.join('\n');
-    } else {
-      textoExtraido = textoResposta.substring(0, 50000);
-    }
-
-    // Atualizar fornecedor se tiver dados do supplier
-    if (dadosIA && dadosIA.supplier) {
-      const s = dadosIA.supplier;
-      const updates = [];
-      const vals = [];
-      var idx = 1;
-      if (s.phone && s.phone !== 'null') { updates.push('telefone = COALESCE(NULLIF(telefone,\'\'), $' + idx++ + ')'); vals.push(s.phone); }
-      if (s.email && s.email !== 'null') { updates.push('email = COALESCE(NULLIF(email,\'\'), $' + idx++ + ')'); vals.push(s.email); }
-      if (updates.length > 0) {
-        vals.push(fornecedorId);
-        await query('UPDATE fornecedores SET ' + updates.join(', ') + ' WHERE id = $' + idx, vals);
-      }
-    }
-
-    // Salvar dados JSON no texto_extraido
-    const textoCompleto = dadosIA
-      ? JSON.stringify(dadosIA, null, 2) + '\n\n---TEXTO---\n' + textoExtraido
-      : textoExtraido;
-
-    // Criar chunks para busca
-    const palavrasPorChunk = 400;
-    const palavras = textoExtraido.split(/\s+/).filter(p => p.length > 0);
-    const chunks = [];
-    for (var i = 0; i < palavras.length; i += palavrasPorChunk - 30) {
-      const slice = palavras.slice(i, i + palavrasPorChunk);
-      if (slice.length < 10) break;
-      chunks.push(slice.join(' '));
-    }
-
-    // Limpar chunks antigos
-    await query('DELETE FROM chunks WHERE catalogo_id = $1', [catalogoId]);
-
-    // Inserir chunks novos
-    for (var j = 0; j < chunks.length; j++) {
-      await query(
-        'INSERT INTO chunks (catalogo_id, fornecedor_id, conteudo, indice) VALUES ($1, $2, $3, $4)',
-        [catalogoId, fornecedorId, chunks[j], j]
-      );
-    }
-
-    // Atualizar catálogo
-    await query(
-      'UPDATE catalogos SET status = $1, texto_extraido = $2, paginas = $3, atualizado_em = NOW() WHERE id = $4',
-      ['processado', textoCompleto.substring(0, 100000), Math.max(paginas, 1), catalogoId]
-    );
-
-    console.log('Extração concluída: ' + chunks.length + ' chunks, ' + (dadosIA ? dadosIA.total_products : 0) + ' produtos');
-
-    // Auto-deletar PDF do storage após 5 minutos (economia de espaço)
-    if (storageKey) {
-      setTimeout(async function() {
-        try {
-          const { deleteFile } = require('../services/storage.service');
-          await deleteFile(storageKey);
-          await query('UPDATE catalogos SET storage_path = NULL WHERE id = $1', [catalogoId]);
-          console.log('PDF removido do storage após extração: ' + storageKey);
-        } catch(e) {
-          console.log('Aviso: não foi possível remover PDF do storage:', e.message);
-        }
-      }, 5 * 60 * 1000);
-    }
-
-  } catch (err) {
-    console.error('Erro na extração IA, usando fallback:', err.message);
-
-    // Fallback: extrair texto simples com pdf-parse
-    try {
-      const pdfParse = require('pdf-parse');
-      const data = await pdfParse(buffer);
-      const texto = data.text || '';
-
-      if (texto.length > 50) {
-        const palavras = texto.split(/\s+/).filter(p => p.length > 0);
-        const chunks = [];
-        for (var i = 0; i < palavras.length; i += 370) {
-          const slice = palavras.slice(i, i + 400);
-          if (slice.length < 10) break;
-          chunks.push(slice.join(' '));
-        }
-
-        await query('DELETE FROM chunks WHERE catalogo_id = $1', [catalogoId]);
-        for (var j = 0; j < chunks.length; j++) {
-          await query('INSERT INTO chunks (catalogo_id, fornecedor_id, conteudo, indice) VALUES ($1, $2, $3, $4)',
-            [catalogoId, fornecedorId, chunks[j], j]);
-        }
-
-        await query(
-          'UPDATE catalogos SET status = $1, texto_extraido = $2, paginas = $3, atualizado_em = NOW() WHERE id = $4',
-          ['processado', texto.substring(0, 100000), data.numpages || 1, catalogoId]
-        );
-      } else {
-        await query('UPDATE catalogos SET status = $1, erro = $2 WHERE id = $3',
-          ['erro', 'PDF sem texto extraível. Configure ANTHROPIC_API_KEY para usar IA Vision.', catalogoId]);
-      }
-    } catch (e2) {
-      await query('UPDATE catalogos SET status = $1, erro = $2 WHERE id = $3',
-        ['erro', 'Erro na extração: ' + e2.message, catalogoId]);
-    }
-  }
-}
 
 module.exports = router;
