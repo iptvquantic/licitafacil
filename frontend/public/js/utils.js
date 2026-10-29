@@ -1,7 +1,43 @@
 // public/js/utils.js — cliente da API (Bearer + localStorage, sem cookie), toasts, modais, tema e helpers
-var API_URL = window.LF_API_URL || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+// Onde está a API: primeiro no mesmo domínio do site (função da Vercel em /api); se não responder, no servidor reserva (Render)
+var API_RESERVA = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:3000'
-  : 'https://licitafacil-api-kxks.onrender.com');
+  : 'https://licitafacil-api-kxks.onrender.com';
+var API_URL = window.LF_API_URL || API_RESERVA;
+var _apiEscolhida = null;
+
+// true quando a API responde e o banco está no ar
+function testarAPI(base, limiteMs) {
+  var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, limiteMs || 9000) : null;
+  return fetch(base + '/api/health?sonda=1', { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
+    .then(function (r) { return r.json().catch(function () { return null; }); })
+    .then(function (j) { if (timer) clearTimeout(timer); return !!(j && j.db === 'ok'); },
+      function () { if (timer) clearTimeout(timer); return false; });
+}
+
+function escolherAPI() {
+  if (_apiEscolhida) return _apiEscolhida;
+  if (window.LF_API_URL) { _apiEscolhida = Promise.resolve(API_URL); return _apiEscolhida; }
+  var salvo = null;
+  try { salvo = JSON.parse(sessionStorage.getItem('lf_api') || 'null'); } catch (e) { salvo = null; }
+  if (salvo && salvo.url === '' && Date.now() - salvo.em < 15 * 60 * 1000) {
+    API_URL = '';
+    _apiEscolhida = Promise.resolve(API_URL);
+    return _apiEscolhida;
+  }
+  _apiEscolhida = testarAPI('', 9000).then(function (ok) {
+    API_URL = ok ? '' : API_RESERVA;
+    try { if (ok) sessionStorage.setItem('lf_api', JSON.stringify({ url: '', em: Date.now() })); else sessionStorage.removeItem('lf_api'); } catch (e) { /* ignora */ }
+    return API_URL;
+  });
+  return _apiEscolhida;
+}
+
+function esquecerAPI() {
+  _apiEscolhida = null;
+  try { sessionStorage.removeItem('lf_api'); } catch (e) { /* ignora */ }
+}
 
 var PAGINAS_PUBLICAS = ['/login.html', '/cadastro.html', '/recuperar.html', '/resetar.html', '/planos.html'];
 
@@ -27,7 +63,7 @@ function api(method, path, body, isFormData, opcoes) {
   if (ctrl) { init.signal = ctrl.signal; timer = setTimeout(function () { ctrl.abort(); }, limite); }
   var tentativa = opcoes.tentativa || 0;
 
-  return fetch(API_URL + path, init).then(function (r) {
+  return escolherAPI().then(function (base) { return fetch(base + path, init); }).then(function (r) {
     if (timer) clearTimeout(timer);
     return r.text().then(function (txt) {
       var data = null;
@@ -48,6 +84,7 @@ function api(method, path, body, isFormData, opcoes) {
     });
   }, function (err) {
     if (timer) clearTimeout(timer);
+    esquecerAPI(); // na próxima chamada, procura de novo qual servidor está no ar
     // rede caiu ou servidor acordando: tenta de novo uma vez nas leituras
     if (method === 'GET' && tentativa < 1) {
       return new Promise(function (ok) { setTimeout(ok, 2500); }).then(function () {
@@ -57,7 +94,7 @@ function api(method, path, body, isFormData, opcoes) {
     var abortado = err && err.name === 'AbortError';
     return Promise.reject(erroPadrao(abortado
       ? 'O servidor demorou para responder. Ele pode estar iniciando; tente de novo em alguns segundos.'
-      : 'Sem conexão com o servidor. Verifique sua internet e tente de novo.', abortado ? 'TEMPO' : 'REDE'));
+      : 'Não consegui falar com o servidor do LicitaFácil agora. Ele pode estar em manutenção — tente de novo em alguns minutos.', abortado ? 'TEMPO' : 'REDE'));
   });
 }
 
@@ -69,7 +106,21 @@ function apiForm(path, formData) { return api('POST', path, formData, true, { ti
 
 // Acorda o servidor (Render gratuito dorme) enquanto a pessoa digita
 function acordarServidor() {
-  try { fetch(API_URL + '/api/health', { method: 'GET' }).catch(function () {}); } catch (e) { /* ignora */ }
+  escolherAPI().then(function (base) { return fetch(base + '/api/health', { method: 'GET', cache: 'no-store' }); }).catch(function () { /* ignora */ });
+}
+
+// Páginas de entrada: avisa com clareza quando o sistema está fora do ar (em vez de culpar a internet da pessoa)
+function avisarSeForaDoAr() {
+  escolherAPI().then(function (base) { return testarAPI(base, 15000); }).then(function (ok) {
+    if (ok || document.getElementById('aviso-servidor')) return;
+    var aviso = document.createElement('div');
+    aviso.id = 'aviso-servidor';
+    aviso.className = 'banner alerta';
+    aviso.setAttribute('role', 'status');
+    aviso.style.cssText = 'max-width:560px;margin:16px auto 0;justify-content:center;text-align:center';
+    aviso.textContent = 'O LicitaFácil está em manutenção neste momento. Seus dados estão guardados. Tente de novo em alguns minutos.';
+    document.body.insertBefore(aviso, document.body.firstChild);
+  });
 }
 
 function msgErro(err, padrao) { return (err && err.error) ? err.error : (padrao || 'Algo deu errado. Tente de novo.'); }
@@ -214,3 +265,7 @@ function redirectIfLoggedIn() {
 }
 
 carregarTema();
+if (paginaPublica() && !/planos\.html$/.test(window.location.pathname)) {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', avisarSeForaDoAr);
+  else avisarSeForaDoAr();
+}

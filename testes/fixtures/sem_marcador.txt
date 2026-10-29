@@ -1,0 +1,14 @@
+Nome: Comercial Alfa EPI
+CNPJ: 11.222.333/0001-44
+Endereço: Av. Brasil, 500
+
+Nome: Luva de Segurança Isolante Classe 2
+Código: LV-C2
+Tensão: 17kV
+Norma: NBR 16295
+Preço: R$ 289,00
+
+Nome: Capacete Classe B com jugular
+Código: CAP-B
+Norma: NBR 8221
+Preço: R$ 45,00

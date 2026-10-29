@@ -122,16 +122,27 @@ async function indexarTexto(opcoes) {
 const fila = [];
 let rodando = false;
 
+// Na Vercel a função congela depois da resposta: waitUntil mantém a fila rodando até o fim (dentro do tempo máximo).
+// É o mesmo mecanismo do pacote @vercel/functions, sem a dependência.
+function manterVivo(promessa) {
+  if (!process.env.VERCEL) return;
+  try {
+    const contexto = globalThis[Symbol.for('@vercel/request-context')];
+    const atual = contexto && typeof contexto.get === 'function' ? contexto.get() : null;
+    if (atual && typeof atual.waitUntil === 'function') atual.waitUntil(promessa);
+  } catch (err) { console.warn('[ia-fila] waitUntil indisponível: ' + err.message); }
+}
+
 function enfileirar(catalogoId) {
   catalogoId = parseInt(catalogoId, 10);
   if (fila.indexOf(catalogoId) < 0) fila.push(catalogoId);
-  processarFila();
+  manterVivo(processarFila());
 }
 
 async function agendarEstruturacao(catalogoId) {
   catalogoId = parseInt(catalogoId, 10);
   try {
-    await db.query("UPDATE catalogos SET ia_status = 'na_fila', ia_info = 'Aguardando a IA organizar os produtos…' WHERE id = $1", [catalogoId]);
+    await db.query("UPDATE catalogos SET ia_status = 'na_fila', ia_info = 'Aguardando a IA organizar os produtos…', atualizado_em = NOW() WHERE id = $1", [catalogoId]);
   } catch (err) { console.error('[ia-fila] ' + err.message); }
   enfileirar(catalogoId);
 }
@@ -144,7 +155,7 @@ async function processarFila() {
       const id = fila.shift();
       try { await estruturarCatalogo(id); } catch (err) {
         console.error('[ia-fila] catálogo ' + id + ': ' + err.message);
-        await db.query("UPDATE catalogos SET ia_status = 'falhou', ia_info = $1 WHERE id = $2",
+        await db.query("UPDATE catalogos SET ia_status = 'falhou', ia_info = $1, atualizado_em = NOW() WHERE id = $2",
           ['A IA gratuita não respondeu agora. Tente de novo mais tarde ou use o Prompt Mestre.', id]).catch(function () {});
       }
     }
@@ -159,13 +170,13 @@ async function estruturarCatalogo(catalogoId) {
     [catalogoId]);
   const c = r.rows[0];
   if (!c || !c.texto_extraido) return;
-  await db.query("UPDATE catalogos SET ia_status = 'estruturando', ia_info = 'A IA está lendo o catálogo…' WHERE id = $1", [catalogoId]);
+  await db.query("UPDATE catalogos SET ia_status = 'estruturando', ia_info = 'A IA está lendo o catálogo…', atualizado_em = NOW() WHERE id = $1", [catalogoId]);
   const saida = await ia.estruturarComIA(c.texto_extraido, function (parte, total) {
     return db.query('UPDATE catalogos SET ia_info = $1 WHERE id = $2', ['A IA está lendo a parte ' + parte + ' de ' + total + '…', catalogoId]).catch(function () {});
   });
   const est = leitor.estruturar(saida.texto);
   if (!est.produtos.length) {
-    await db.query("UPDATE catalogos SET ia_status = 'sem_produtos', ia_info = 'A IA não identificou produtos neste texto.' WHERE id = $1", [catalogoId]);
+    await db.query("UPDATE catalogos SET ia_status = 'sem_produtos', ia_info = 'A IA não identificou produtos neste texto.', atualizado_em = NOW() WHERE id = $1", [catalogoId]);
     return;
   }
   await db.transaction(async function (client) {
@@ -173,15 +184,15 @@ async function estruturarCatalogo(catalogoId) {
     const ids = { usuarioId: c.usuario_id, fornecedorId: c.fornecedor_id, catalogoId: catalogoId };
     await db.inserirEmLote(client, 'produtos', COLUNAS_PRODUTO,
       est.produtos.map(function (p, i) { return linhaProduto(p, i, ids, 'ia'); }));
-    await client.query("UPDATE catalogos SET total_produtos = $1, ia_status = 'concluido', ia_info = $2 WHERE id = $3",
+    await client.query("UPDATE catalogos SET total_produtos = $1, ia_status = 'concluido', ia_info = $2, atualizado_em = NOW() WHERE id = $3",
       [est.produtos.length, est.produtos.length + ' produto(s) estruturado(s) pela IA' + (saida.falhas ? ' (parte do texto não foi lida)' : ''), catalogoId]);
     await completarFornecedor(client, c.fornecedor_id, est.fornecedor);
   });
 }
 
-// Ao iniciar: libera catálogos que ficaram presos por reinício do servidor
+// Libera catálogos presos (servidor reiniciou ou a função da Vercel terminou no meio). Só mexe no que está parado há 15 min.
 async function liberarPresos() {
-  await db.query("UPDATE catalogos SET ia_status = 'interrompido', ia_info = 'Interrompido por reinício do servidor. Clique em Estruturar com IA para tentar de novo.' WHERE ia_status IN ('na_fila', 'estruturando')");
+  await db.query("UPDATE catalogos SET ia_status = 'interrompido', ia_info = 'A organização pela IA foi interrompida. Clique em Organizar com IA para tentar de novo.' WHERE ia_status IN ('na_fila', 'estruturando') AND atualizado_em < NOW() - INTERVAL '15 minutes'");
   await db.query("UPDATE catalogos SET status = 'erro', erro = 'Processamento interrompido. Envie o catálogo novamente.' WHERE status IN ('processando', 'pendente') AND atualizado_em < NOW() - INTERVAL '20 minutes'");
 }
 

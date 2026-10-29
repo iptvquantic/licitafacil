@@ -33,7 +33,7 @@ var ORIGENS = {
 var FORMATOS = { prompt_mestre: 'Prompt Mestre', json: 'JSON', tabela: 'Tabela', texto: 'Texto livre' };
 var IA_ATIVA = ['na_fila', 'estruturando'];
 var MAX_ARQUIVO_MB = 50;
-var MAX_TEXTO = 3000000;
+var MAX_TEXTO = 1500000; // a função da Vercel aceita até 4,5 MB por envio
 
 var CAMPOS_PRODUTO = [
   ['nome', 'Produto'], ['codigo', 'Código'], ['marca', 'Marca'], ['categoria', 'Categoria'], ['descricao', 'Descrição'],

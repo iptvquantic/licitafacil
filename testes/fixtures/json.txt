@@ -1,0 +1,3 @@
+```json
+{"supplier":{"name":"Cimentos Norte","phone":"(91) 3222-1111"},"products":[{"name":"Cimento CP-III 40 RS","code":"CPIII40","price":"R$ 32,00","unit":"saco 50kg","dimensions":{"raw":"50kg"}},{"name":"Cimento CP-II-E 32","code":null,"price":null,"unit":"saco"}],"total_products":2}
+```

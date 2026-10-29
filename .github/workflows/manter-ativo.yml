@@ -1,0 +1,21 @@
+name: Manter banco ativo
+# O Supabase grátis pausa o banco após ~7 dias sem uso. Uma consulta por dia evita a pausa.
+on:
+  schedule:
+    - cron: '17 11 * * *'   # todo dia às 08:17 (Brasília)
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Consultar a API (toca o banco)
+        run: |
+          ok=0
+          for url in https://licitafacil-one.vercel.app/api/health https://licitafacil-api-kxks.onrender.com/api/health; do
+            codigo=$(curl -s -m 90 -o resposta.json -w "%{http_code}" "$url" || echo "000")
+            echo "$codigo $url $(head -c 200 resposta.json 2>/dev/null)"
+            if [ "$codigo" = "200" ]; then ok=1; fi
+          done
+          if [ "$ok" != "1" ]; then echo "::warning::Nenhuma API respondeu com o banco no ar"; fi

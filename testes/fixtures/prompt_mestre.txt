@@ -1,0 +1,72 @@
+FORNECEDOR
+Nome: Flex Fast Fios Elétricos Ltda
+CNPJ: 12.345.678/0001-90
+Telefone: (11) 95780-8642
+WhatsApp: (11) 95780-8642
+Email: vendas@flexfast.com.br
+Site: www.flexfast.com.br
+Endereço: Rua das Indústrias, 100 - São Paulo/SP
+Especialidade: Fios e cabos elétricos de baixa tensão
+Normas/Certificações: ABNT NBR 6148, INMETRO
+
+---
+
+PRODUTOS
+
+PRODUTO 1
+Nome: Cabo PP 3x2,5mm² 500V
+Código/Referência: PP-325
+Categoria: Cabo flexível
+Descrição técnica: Cabo multipolar flexível com cobertura de PVC, classe 5
+Bitola/Dimensão: 3x2,5mm²
+Tensão: 500V
+Material condutor: Cobre eletrolítico
+Isolamento: PVC 70°C
+Cobertura externa: PVC preto
+Temperatura máxima: 70°C
+Aplicação: Ligação de motores e máquinas
+Norma aplicável: ABNT NBR 13249
+Certificações: INMETRO
+Preço: R$ 8,90
+Unidade de venda: metro
+
+PRODUTO 2
+Nome: Cabo Flexível 2,5mm² 750V
+Código/Referência: FX-25
+Categoria: Cabo flexível
+Descrição técnica: Cabo unipolar flexível antichama
+Bitola/Dimensão: 2,5mm²
+Tensão: 450/750V
+Material condutor: Cobre
+Isolamento: PVC antichama
+Cobertura externa: não informado
+Temperatura máxima: 70°C
+Aplicação: Instalações residenciais
+Norma aplicável: ABNT NBR NM 247-3
+Certificações: não informado
+Preço: R$ 2,35
+Unidade de venda: metro
+
+PRODUTO 3
+Nome: Cabo Fotovoltaico 6mm² 1,8kV
+Código/Referência: não informado
+Categoria: Cabo solar
+Descrição técnica: Cabo para sistemas fotovoltaicos, dupla isolação
+Bitola/Dimensão: 6mm²
+Tensão: 1,8kV CC
+Material condutor: Cobre estanhado
+Isolamento: XLPE
+Cobertura externa: Composto não halogenado
+Temperatura máxima: 90°C
+Aplicação: Usinas e telhados solares
+Norma aplicável: ABNT NBR 16612
+Certificações: INMETRO
+Preço: não informado
+Unidade de venda: rolo 100m
+
+---
+
+RESUMO FINAL
+Total de produtos extraídos: 3
+Categorias encontradas: Cabo flexível, Cabo solar
+Observações importantes: nenhuma

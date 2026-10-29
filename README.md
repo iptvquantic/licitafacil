@@ -7,7 +7,7 @@ SaaS para equipes de compras e licitação: cadastre fornecedores, leia os catá
 | Parte | Onde roda | O que faz |
 |---|---|---|
 | Site (`frontend/public`) | Vercel | HTML/CSS/JS sem build. O **leitor de catálogos roda no navegador**: pdf.js lê PDFs com texto e tesseract.js faz OCR de escaneados e fotos (arquivos em `vendor/`). O arquivo nunca é enviado; só o texto. |
-| API (`backend/src`) | Render | Node.js + Express. Organiza o texto em produtos (Prompt Mestre, JSON ou tabela), indexa para a busca técnica e, se o texto vier sem formato, pede à IA gratuita (OpenRouter) para organizar. |
+| API (`backend/src`) | Vercel (função `/api`, mesmo domínio do site) e Render (reserva) | Node.js + Express. Organiza o texto em produtos (Prompt Mestre, JSON ou tabela), indexa para a busca técnica e, se o texto vier sem formato, pede à IA gratuita (OpenRouter) para organizar. O site testa `/api/health` no próprio domínio e, se não responder, usa o Render. |
 | Banco | Supabase (PostgreSQL) | Tabelas `usuarios`, `fornecedores`, `catalogos`, `chunks`, `produtos`, `pagamentos`. As migrações rodam sozinhas ao iniciar a API (só aditivas) e ligam o RLS. |
 
 Autenticação: JWT no `localStorage` + `Authorization: Bearer` (front e API em domínios diferentes).
@@ -25,7 +25,7 @@ cd frontend && npx serve public -p 8080   # site em http://localhost:8080 (usa a
 
 ## Publicar
 
-`git push` na `main` publica sozinho: Vercel (site) e Render (API). As variáveis da API ficam no painel do Render (lista em `backend/.env.example`). O dono do sistema é definido por `ADMIN_EMAILS` e vê o **Painel do dono** (clientes, confirmação de pagamentos, link de nova senha, saúde do sistema e backup).
+`git push` na `main` publica sozinho: Vercel (site + API em `frontend/api/index.js`) e Render (API reserva). As variáveis da API (lista em `backend/.env.example`) ficam no painel da Vercel (Settings → Environment Variables) e no do Render. O GitHub roda os testes a cada push e consulta a API uma vez por dia para o Supabase não pausar. O dono do sistema é definido por `ADMIN_EMAILS` e vê o **Painel do dono** (clientes, confirmação de pagamentos, link de nova senha, saúde do sistema e backup).
 
 ## Rotas principais da API
 

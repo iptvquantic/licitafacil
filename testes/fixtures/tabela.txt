@@ -1,0 +1,4 @@
+| Nome | Código | Bitola | Tensão | Preço |
+|---|---|---|---|---|
+| Cabo PP 2x1,5mm² | PP-215 | 2x1,5mm² | 500V | R$ 4,10 |
+| Cabo PP 4x4mm² | PP-44 | 4x4mm² | 500V | R$ 21,30 |

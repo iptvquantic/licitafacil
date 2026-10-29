@@ -1,0 +1,16 @@
+{
+  "name": "licitafacil-testes",
+  "private": true,
+  "description": "Testes do LicitaFácil: leitor (unitário), API (precisa de Postgres) e navegador (Playwright)",
+  "scripts": {
+    "leitor": "node leitor.test.js",
+    "api": "node api.test.js",
+    "arquivos": "node gerar-arquivos.js",
+    "e2e": "node e2e.test.js",
+    "acessibilidade": "node acessibilidade.test.js"
+  },
+  "devDependencies": {
+    "axe-core": "4.10.2",
+    "playwright": "1.49.1"
+  }
+}

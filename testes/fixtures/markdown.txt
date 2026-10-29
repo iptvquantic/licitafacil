@@ -1,0 +1,21 @@
+Claro! Aqui está a extração:
+
+## FORNECEDOR
+- **Nome:** Elétrica Sul Distribuidora
+- **Telefone:** (51) 3333-4444
+- **Email:** contato@eletricasul.com
+
+### **PRODUTO 1** – Disjuntor DIN 20A
+- **Código:** DJ-C20
+- **Categoria:** Proteção
+- **Tensão:** 220/380V
+- **Norma aplicável:** NBR NM 60898
+- **Preço:** R$ 18,50
+- **Corrente nominal:** 20A
+- **Curva:** C
+
+### **PRODUTO 2**
+- **Nome:** Disjuntor DIN 32A
+- **Código:** DJ-C32
+- **Preço:** R$ 19,90
+- **Corrente nominal:** 32A

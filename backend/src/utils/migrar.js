@@ -105,8 +105,19 @@ function migrar() {
       return { ok: false, erro: err.message };
     }
     let falhas = 0;
-    for (const passo of PASSOS) {
-      try { await db.query(passo[1]); } catch (err) { falhas++; console.error('[migracao] falhou: ' + passo[0] + ' — ' + err.message); }
+    let pronto = false;
+    try {
+      const r = await db.query(
+        "SELECT to_regclass('public.produtos') IS NOT NULL AND to_regclass('public.pagamentos') IS NOT NULL" +
+        " AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'catalogos' AND column_name = 'ia_info')" +
+        " AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'chunks' AND column_name = 'texto_norm')" +
+        " AND to_regclass('public.idx_pagamentos_status') IS NOT NULL AS pronto");
+      pronto = !!(r.rows[0] && r.rows[0].pronto);
+    } catch (_) { pronto = false; }
+    if (!pronto) {
+      for (const passo of PASSOS) {
+        try { await db.query(passo[1]); } catch (err) { falhas++; console.error('[migracao] falhou: ' + passo[0] + ' — ' + err.message); }
+      }
     }
     if (falhas >= PASSOS.length) {
       // banco fora do ar: tenta de novo na próxima requisição

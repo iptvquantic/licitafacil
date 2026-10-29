@@ -4,8 +4,9 @@ const { Pool } = require('pg');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: parseInt(process.env.DB_POOL_MAX || '8', 10),
+  ssl: (process.env.NODE_ENV === 'production' || process.env.VERCEL) ? { rejectUnauthorized: false } : false,
+  // na Vercel cada instância abre poucas conexões (o Transaction Pooler do Supabase multiplexa)
+  max: parseInt(process.env.DB_POOL_MAX || (process.env.VERCEL ? '3' : '8'), 10),
   idleTimeoutMillis: 30000,
   // o Supabase pode demorar alguns segundos para responder na primeira conexão
   connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT_MS || '15000', 10),

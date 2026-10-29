@@ -1,0 +1,66 @@
+// Varredura de acessibilidade (axe-core) nas telas principais, temas escuro e claro
+const { chromium } = require('playwright');
+const fs = require('fs');
+const path = require('path');
+const SITE = process.env.SITE || 'http://localhost:8080';
+const NAVEGADOR = process.env.CHROMIUM || undefined;
+const AXE = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+(async () => {
+  const b = await chromium.launch({ executablePath: NAVEGADOR });
+  const ctx = await b.newContext({ viewport: { width: 1366, height: 860 }, locale: 'pt-BR' });
+  await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+  const p = await ctx.newPage();
+  await p.goto(SITE + '/login.html');
+  await p.fill('#email', 'admin@teste.com'); await p.fill('#senha', 'admin123'); await p.click('#btn-login');
+  await p.waitForURL(SITE + '/');
+  // garante um fornecedor com produtos para as telas
+  const fid = await p.evaluate(async () => {
+    const h = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + localStorage.getItem('lf_token') };
+    const r = await fetch(API_URL + '/api/fornecedores', { method: 'POST', headers: h, body: JSON.stringify({ nome: 'Acessibilidade Ltda', whatsapp: '11999998888', email: 'a@b.com.br' }) });
+    const f = (await r.json()).fornecedor;
+    await fetch(API_URL + '/api/extracao/texto/' + f.id, { method: 'POST', headers: h, body: JSON.stringify({ texto: 'PRODUTO 1\nNome: Cabo PP 3x2,5mm² 500V\nCódigo: PP-325\nNorma: NBR 13249\nPreço: R$ 8,90\nUnidade: metro\n\nPRODUTO 2\nNome: Cabo flexível 2,5mm²\nCódigo: FX-25\nTensão: 750V' }) });
+    return f.id;
+  });
+  const telas = [
+    ['busca', SITE + '/#busca', async () => { await p.fill('#campo-busca', 'cabo PP 3x2,5mm'); await p.click('#btn-buscar'); await p.waitForSelector('#resultados .tabela'); }],
+    ['fornecedores', SITE + '/#fornecedores', async () => { await p.waitForSelector('#lista-fornecedores .tabela'); }],
+    ['produtos', SITE + '/#fornecedor/' + fid, async () => { await p.waitForSelector('#tbody-produtos tr'); }],
+    ['adicionar', SITE + '/#fornecedor/' + fid + '/adicionar', async () => { await p.waitForSelector('#painel-adicionar:not(.hidden)'); }],
+    ['config', SITE + '/#config', async () => { await p.waitForSelector('#secao-config:not(.hidden)'); }],
+    ['admin', SITE + '/#admin', async () => { await p.waitForSelector('#adm-usuarios .tabela'); }]
+  ];
+  let total = 0;
+  const anon = await (await b.newContext({ viewport: { width: 1366, height: 860 }, locale: 'pt-BR' })).newPage();
+  await anon.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+  for (const pub of ['login', 'cadastro', 'planos', 'recuperar']) {
+    await anon.goto(SITE + '/' + pub + '.html');
+    await anon.addScriptTag({ content: AXE });
+    const r = await anon.evaluate(async () => {
+      const res = await axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'best-practice'], resultTypes: ['violations'] });
+      return res.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.impact + ' ' + v.id + ' (' + v.nodes.length + '): ' + v.nodes.slice(0, 3).map(n => n.target.join(' ')).join(' | '));
+    });
+    total += r.length;
+    console.log((r.length ? '✗ ' : '✓ ') + 'pública / ' + pub + (r.length ? '\n    ' + r.join('\n    ') : ''));
+  }
+  for (const tema of ['dark', 'light']) {
+    for (const [nome, url, preparar, publica] of telas) {
+      if (publica && tema === 'light') continue;
+      await p.evaluate(t => localStorage.setItem('tema', t), tema);
+      await p.goto(url);
+      if (url.indexOf('#') > 0) await p.waitForSelector('.secao:not(.hidden)');
+      if (preparar) await preparar();
+      await p.waitForTimeout(400);
+      await p.addScriptTag({ content: AXE });
+      const r = await p.evaluate(async () => {
+        const res = await axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'best-practice'], resultTypes: ['violations'] });
+        return res.violations.filter(v => v.impact === 'serious' || v.impact === 'critical')
+          .map(v => v.impact + ' ' + v.id + ' (' + v.nodes.length + '): ' + v.nodes.slice(0, 3).map(n => n.target.join(' ')).join(' | ') + ' → ' + (v.nodes[0].failureSummary || '').split('\n').slice(1, 2).join(''));
+      });
+      total += r.length;
+      console.log((r.length ? '✗ ' : '✓ ') + tema + ' / ' + nome + (r.length ? '\n    ' + r.join('\n    ') : ''));
+    }
+  }
+  await p.evaluate(async (id) => { await fetch(API_URL + '/api/fornecedores/' + id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + localStorage.getItem('lf_token') } }); localStorage.setItem('tema', 'dark'); }, fid);
+  await b.close();
+  console.log('\nViolações graves/críticas: ' + total);
+})();

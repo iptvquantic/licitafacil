@@ -1,0 +1,16 @@
+PRODUTO 1
+Nome: Cabo de Cobre Nu 16mm² para aterramento em
+malhas e SPDA
+Código/Referência: CN-16
+Descrição técnica: Cordoalha de cobre nu meio duro, 7 fios, para
+aterramento conforme projeto
+Bitola/Dimensão: 16mm²
+Preço: R$ 15,20
+Unidade de venda: kg
+PRODUTO 2
+Nome: Haste de Aterramento 5/8" x 2,4m
+Código/Referência: HA-58
+Bitola/Dimensão: 5/8" x 2,4m
+Material condutor: Aço cobreado 254 microns
+Preço: R$ 39,00
+Unidade de venda: peça

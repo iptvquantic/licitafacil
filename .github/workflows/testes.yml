@@ -1,0 +1,47 @@
+name: Testes
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    name: Leitor e API
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: licitafacil
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/licitafacil
+      JWT_SECRET: segredo-somente-para-teste
+      ADMIN_EMAILS: admin@teste.com
+      NODE_ENV: test
+      PORT: '3000'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Instalar dependências da API
+        working-directory: backend
+        run: npm ci --no-audit --no-fund
+      - name: Auditoria de segurança das dependências
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
+      - name: Testar o leitor de catálogos
+        run: node testes/leitor.test.js
+      - name: Subir a API e testar
+        run: |
+          node backend/src/server.js > api.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:3000/api/health > /dev/null && break; sleep 1; done
+          node testes/api.test.js || (echo '--- log da API ---'; cat api.log; exit 1)

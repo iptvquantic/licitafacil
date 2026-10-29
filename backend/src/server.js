@@ -12,7 +12,7 @@ const { query } = require('./utils/db');
 const { migrar } = require('./utils/migrar');
 const indexacao = require('./services/indexacao.service');
 
-const VERSAO = '3.0.0';
+const VERSAO = '3.1.0';
 process.env.APP_VERSION = VERSAO;
 
 const app = express();
@@ -63,14 +63,23 @@ app.get('/api/health', async function (req, res) {
       saude = { em: Date.now(), db: 'erro', ms: null };
     }
   }
-  res.status(saude.db === 'ok' ? 200 : 503).json({
+  // ?sonda=1 (usado pelo site para escolher o servidor) sempre responde 200 para não sujar o console do navegador
+  const codigo = (saude.db === 'ok' || req.query.sonda === '1') ? 200 : 503;
+  res.status(codigo).json({
     status: saude.db === 'ok' ? 'ok' : 'degradado', db: saude.db, db_ms: saude.ms, version: VERSAO, timestamp: new Date().toISOString()
   });
 });
 
-// Garante que as migrações rodaram antes de atender rotas da API
+// Garante que as migrações rodaram antes de atender rotas da API (e libera catálogos presos uma vez por instância)
+let presosLiberados = false;
 app.use('/api', function (req, res, next) {
-  migrar().then(function () { next(); }, function () { next(); });
+  migrar().then(function (r) {
+    if (!presosLiberados && r && r.ok !== false) {
+      presosLiberados = true;
+      indexacao.liberarPresos().catch(function (err) { console.error('[inicio] ' + err.message); });
+    }
+    next();
+  }, function () { next(); });
 });
 
 const apiLimiter = rateLimit({
@@ -99,9 +108,7 @@ app.use(function (err, req, res, next) { // eslint-disable-line no-unused-vars
 if (require.main === module) {
   app.listen(PORT, '0.0.0.0', function () {
     console.log('🚀 LicitaFácil API v' + VERSAO + ' na porta ' + PORT + ' (' + (process.env.NODE_ENV || 'development') + ')');
-    migrar().then(function () { return indexacao.liberarPresos(); }).catch(function (err) {
-      console.error('[inicio] ' + err.message);
-    });
+    migrar().catch(function (err) { console.error('[inicio] ' + err.message); });
   });
 }
 

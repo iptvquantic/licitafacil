@@ -6,6 +6,7 @@ const BASE_OPENROUTER = (process.env.OPENROUTER_BASE_URL || 'https://openrouter.
 const URL_CHAT = BASE_OPENROUTER + '/chat/completions';
 const URL_MODELOS = BASE_OPENROUTER + '/models';
 const SEIS_HORAS = 6 * 3600 * 1000;
+const NA_VERCEL = !!process.env.VERCEL;
 
 // famílias preferidas (as que existirem e forem gratuitas no momento sobem na fila)
 const PREFERIDOS = ['deepseek-chat', 'deepseek-v3', 'deepseek-r1', 'llama-3.3-70b', 'llama-4', 'qwen3', 'qwen-2.5-72b',
@@ -67,9 +68,12 @@ async function candidatos(max) {
 async function chamarIA(mensagens, opcoes) {
   opcoes = opcoes || {};
   if (!configurada()) throw new Error('IA não configurada (OPENROUTER_API_KEY ausente)');
-  const lista = await candidatos(opcoes.tentativas || 4);
+  const lista = await candidatos(opcoes.tentativas || (NA_VERCEL ? 3 : 4));
+  const prazo = Date.now() + (opcoes.prazoMs || (NA_VERCEL ? 45000 : 150000));
   let ultimo = 'sem resposta';
   for (const modelo of lista) {
+    const resta = prazo - Date.now();
+    if (resta < 3000) { ultimo = ultimo + ' (tempo esgotado)'; break; }
     try {
       const r = await fetch(URL_CHAT, {
         method: 'POST',
@@ -85,7 +89,7 @@ async function chamarIA(mensagens, opcoes) {
           max_tokens: opcoes.maxTokens || 900,
           temperature: opcoes.temperatura == null ? 0.2 : opcoes.temperatura
         }),
-        signal: AbortSignal.timeout(opcoes.timeoutMs || 40000)
+        signal: AbortSignal.timeout(Math.min(opcoes.timeoutMs || (NA_VERCEL ? 20000 : 40000), resta))
       });
       if (r.status === 401 || r.status === 403) {
         ultimo = 'chave do OpenRouter recusada (' + r.status + ')';
@@ -214,7 +218,8 @@ function dividirParaIA(texto, tamanho) {
 }
 
 async function estruturarComIA(texto, aoProgredir) {
-  const blocos = dividirParaIA(texto, 7000).slice(0, parseInt(process.env.IA_MAX_BLOCOS || '10', 10));
+  const maxBlocos = parseInt(process.env.IA_MAX_BLOCOS || (NA_VERCEL ? '2' : '10'), 10);
+  const blocos = dividirParaIA(texto, 7000).slice(0, maxBlocos);
   const saidas = [];
   let modelo = null;
   let falhas = 0;
@@ -225,7 +230,7 @@ async function estruturarComIA(texto, aoProgredir) {
       const r = await chamarIA([
         { role: 'system', content: PROMPT_ESTRUTURAR },
         { role: 'user', content: blocos[i] }
-      ], { maxTokens: 3500, timeoutMs: 90000, temperatura: 0 });
+      ], { maxTokens: 3500, timeoutMs: NA_VERCEL ? 22000 : 90000, prazoMs: NA_VERCEL ? 24000 : 180000, tentativas: NA_VERCEL ? 2 : 4, temperatura: 0 });
       modelo = r.modelo;
       if (!/^\s*SEM PRODUTOS\s*$/i.test(r.texto)) saidas.push(r.texto);
     } catch (err) {
