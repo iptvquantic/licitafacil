@@ -6,14 +6,16 @@ var API_RESERVA = (window.location.hostname === 'localhost' || window.location.h
 var API_URL = window.LF_API_URL || API_RESERVA;
 var _apiEscolhida = null;
 
-// true quando a API responde e o banco está no ar
+// true quando a API responde, o banco está no ar e o login está configurado
 function testarAPI(base, limiteMs) {
   var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, limiteMs || 9000) : null;
   return fetch(base + '/api/health?sonda=1', { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
     .then(function (r) { return r.json().catch(function () { return null; }); })
-    .then(function (j) { if (timer) clearTimeout(timer); return !!(j && j.db === 'ok'); },
-      function () { if (timer) clearTimeout(timer); return false; });
+    .then(function (j) {
+      if (timer) clearTimeout(timer);
+      return !!(j && j.db === 'ok' && !(j.config && j.config.jwt === false));
+    }, function () { if (timer) clearTimeout(timer); return false; });
 }
 
 function escolherAPI() {
@@ -115,11 +117,17 @@ function avisarSeForaDoAr() {
     if (ok || document.getElementById('aviso-servidor')) return;
     var aviso = document.createElement('div');
     aviso.id = 'aviso-servidor';
-    aviso.className = 'banner alerta';
+    aviso.className = 'banner alerta aviso-servidor';
     aviso.setAttribute('role', 'status');
-    aviso.style.cssText = 'max-width:560px;margin:16px auto 0;justify-content:center;text-align:center';
-    aviso.textContent = 'O LicitaFácil está em manutenção neste momento. Seus dados estão guardados. Tente de novo em alguns minutos.';
-    document.body.insertBefore(aviso, document.body.firstChild);
+    aviso.textContent = 'O LicitaFácil está em manutenção no momento. Seus dados estão guardados e o acesso volta em breve.';
+    // Fica na coluna do formulário, entre a marca e o cartão; sem cartão, vira uma faixa fixa no topo
+    var cartao = document.querySelector('.auth-card');
+    if (cartao && cartao.parentNode) {
+      cartao.parentNode.insertBefore(aviso, cartao);
+    } else {
+      aviso.classList.add('flutuante');
+      document.body.appendChild(aviso);
+    }
   });
 }
 

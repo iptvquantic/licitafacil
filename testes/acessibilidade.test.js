@@ -1,10 +1,19 @@
-// Varredura de acessibilidade (axe-core) nas telas principais, temas escuro e claro
+// Varredura de acessibilidade (axe-core) nas telas principais, temas escuro, claro e Matrix
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const SITE = process.env.SITE || 'http://localhost:8080';
 const NAVEGADOR = process.env.CHROMIUM || undefined;
 const AXE = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+const TEMAS = ['dark', 'light', 'matrix'];
+// Contraste só vale com a tela parada: espera as animações de entrada (finitas) terminarem
+function esperarAnimacoes(pg) {
+  return pg.waitForFunction(function () {
+    return document.getAnimations().every(function (a) {
+      return a.playState !== 'running' || (a.effect && a.effect.getTiming().iterations === Infinity);
+    });
+  }, null, { timeout: 5000 }).catch(function () { /* segue mesmo assim */ });
+}
 (async () => {
   const b = await chromium.launch({ executablePath: NAVEGADOR });
   const ctx = await b.newContext({ viewport: { width: 1366, height: 860 }, locale: 'pt-BR' });
@@ -32,17 +41,23 @@ const AXE = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
   let total = 0;
   const anon = await (await b.newContext({ viewport: { width: 1366, height: 860 }, locale: 'pt-BR' })).newPage();
   await anon.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
-  for (const pub of ['login', 'cadastro', 'planos', 'recuperar']) {
-    await anon.goto(SITE + '/' + pub + '.html');
-    await anon.addScriptTag({ content: AXE });
-    const r = await anon.evaluate(async () => {
-      const res = await axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'best-practice'], resultTypes: ['violations'] });
-      return res.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.impact + ' ' + v.id + ' (' + v.nodes.length + '): ' + v.nodes.slice(0, 3).map(n => n.target.join(' ')).join(' | '));
-    });
-    total += r.length;
-    console.log((r.length ? '✗ ' : '✓ ') + 'pública / ' + pub + (r.length ? '\n    ' + r.join('\n    ') : ''));
+  await anon.goto(SITE + '/login.html');
+  for (const tema of TEMAS) {
+    await anon.evaluate(t => localStorage.setItem('tema', t), tema);
+    for (const pub of ['login', 'cadastro', 'planos', 'recuperar']) {
+      await anon.goto(SITE + '/' + pub + '.html');
+      await esperarAnimacoes(anon);
+      await anon.addScriptTag({ content: AXE });
+      const r = await anon.evaluate(async () => {
+        const res = await axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'best-practice'], resultTypes: ['violations'] });
+        return res.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.impact + ' ' + v.id + ' (' + v.nodes.length + '): ' + v.nodes.slice(0, 3).map(n => n.target.join(' ')).join(' | '));
+      });
+      total += r.length;
+      console.log((r.length ? '✗ ' : '✓ ') + 'pública / ' + tema + ' / ' + pub + (r.length ? '\n    ' + r.join('\n    ') : ''));
+    }
   }
-  for (const tema of ['dark', 'light']) {
+  await anon.evaluate(() => localStorage.setItem('tema', 'dark'));
+  for (const tema of TEMAS) {
     for (const [nome, url, preparar, publica] of telas) {
       if (publica && tema === 'light') continue;
       await p.evaluate(t => localStorage.setItem('tema', t), tema);
@@ -50,6 +65,7 @@ const AXE = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
       if (url.indexOf('#') > 0) await p.waitForSelector('.secao:not(.hidden)');
       if (preparar) await preparar();
       await p.waitForTimeout(400);
+      await esperarAnimacoes(p);
       await p.addScriptTag({ content: AXE });
       const r = await p.evaluate(async () => {
         const res = await axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'best-practice'], resultTypes: ['violations'] });

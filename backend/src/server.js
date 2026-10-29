@@ -12,7 +12,7 @@ const { query } = require('./utils/db');
 const { migrar } = require('./utils/migrar');
 const indexacao = require('./services/indexacao.service');
 
-const VERSAO = '3.1.0';
+const VERSAO = '3.1.1';
 process.env.APP_VERSION = VERSAO;
 
 const app = express();
@@ -52,21 +52,35 @@ app.use(express.json({ limit: '8mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // ─── Saúde: consulta o banco (mantém o Supabase ativo com o UptimeRobot) ─────
+// config diz só SE cada variável existe (nunca o valor), para o dono conferir a instalação de fora
+function configuracao() {
+  return {
+    banco: !!process.env.DATABASE_URL,
+    jwt: !!process.env.JWT_SECRET,
+    admin: !!process.env.ADMIN_EMAILS,
+    ia: !!process.env.OPENROUTER_API_KEY
+  };
+}
+
 let saude = { em: 0, db: null, ms: null };
 app.get('/api/health', async function (req, res) {
+  const cfg = configuracao();
   if (Date.now() - saude.em > 30000) {
     const t = Date.now();
     try {
+      if (!cfg.banco) throw new Error('DATABASE_URL ausente');
       await query('SELECT 1');
       saude = { em: Date.now(), db: 'ok', ms: Date.now() - t };
     } catch (err) {
       saude = { em: Date.now(), db: 'erro', ms: null };
     }
   }
+  const pronto = saude.db === 'ok' && cfg.jwt;
   // ?sonda=1 (usado pelo site para escolher o servidor) sempre responde 200 para não sujar o console do navegador
-  const codigo = (saude.db === 'ok' || req.query.sonda === '1') ? 200 : 503;
+  const codigo = (pronto || req.query.sonda === '1') ? 200 : 503;
   res.status(codigo).json({
-    status: saude.db === 'ok' ? 'ok' : 'degradado', db: saude.db, db_ms: saude.ms, version: VERSAO, timestamp: new Date().toISOString()
+    status: pronto ? 'ok' : 'degradado', db: saude.db, db_ms: saude.ms, config: cfg,
+    version: VERSAO, timestamp: new Date().toISOString()
   });
 });
 
