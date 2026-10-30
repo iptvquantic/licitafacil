@@ -144,9 +144,16 @@ function showToast(msg, type, duration) {
     container.setAttribute('aria-live', 'polite');
     document.body.appendChild(container);
   }
+  // sem pilha de avisos cobrindo a tela: a mesma mensagem não se repete e ficam no máximo 3 visíveis
+  var texto = String(msg == null ? '' : msg);
+  Array.prototype.slice.call(container.children).forEach(function (t) {
+    if (t.getAttribute('data-msg') === texto) t.remove();
+  });
+  while (container.children.length >= 3) container.removeChild(container.firstChild);
   var icons = { success: '✓', error: '✕', warning: '!', info: 'i' };
   var toast = document.createElement('div');
   toast.className = 'toast ' + type;
+  toast.setAttribute('data-msg', texto);
   toast.innerHTML = '<strong aria-hidden="true">' + (icons[type] || 'i') + '</strong><span>' + esc(msg) + '</span>';
   container.appendChild(toast);
   setTimeout(function () { toast.classList.add('show'); }, 10);

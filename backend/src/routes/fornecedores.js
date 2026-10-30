@@ -250,7 +250,7 @@ router.get('/:id/catalogo/:cid/estruturar', async (req, res) => {
 router.post('/:id/catalogo/:cid/estruturar', async (req, res) => {
   try {
     const out = await indexacao.estruturarParte({ usuarioId: req.usuario.id, fornecedorId: req.params.id, catalogoId: req.params.cid,
-      parte: req.body.parte, contexto: req.body.contexto });
+      parte: req.body.parte, contexto: req.body.contexto, continuarApos: req.body.continuar_apos });
     res.json(Object.assign({ ok: true }, out));
   } catch (err) {
     if (err.amigavel) return res.status(err.status).json({ error: err.message });

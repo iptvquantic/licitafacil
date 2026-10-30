@@ -89,15 +89,17 @@ router.post('/analisar', async (req, res) => {
   }
 });
 
-// POST /api/extracao/estruturar-bloco  { texto, contexto } — IA organiza um trecho de texto (OCR ou PDF) em produtos
+// POST /api/extracao/estruturar-bloco  { texto, contexto, evitar[], continuar_apos } — IA organiza um trecho de texto (OCR ou PDF) em produtos
 router.post('/estruturar-bloco', limiteLeituraIA, async (req, res) => {
   try {
     const texto = String(req.body.texto || '');
     if (texto.replace(/\s/g, '').length < 30) return res.status(400).json({ error: 'Texto curto demais.' });
     if (!ia.configurada()) return res.json(SEM_IA);
     const r = await ia.estruturarTexto(texto.slice(0, 16000), { contexto: String(req.body.contexto || '').slice(0, 300),
-      evitar: Array.isArray(req.body.evitar) ? req.body.evitar.slice(0, 10).map(String) : [] });
-    res.json({ ok: true, produtos: r.produtos, fornecedor: r.fornecedor, resumo: r.resumo, modelo: r.modelo, ms: r.ms });
+      evitar: Array.isArray(req.body.evitar) ? req.body.evitar.slice(0, 10).map(String) : [],
+      continuarApos: String(req.body.continuar_apos || '').slice(0, 200) });
+    res.json({ ok: true, produtos: r.produtos, fornecedor: r.fornecedor, resumo: r.resumo, modelo: r.modelo, ms: r.ms,
+      incompleto: !!r.incompleto, ultimo: r.ultimo || '' });
   } catch (err) { respostaErroIA(res, err); }
 });
 

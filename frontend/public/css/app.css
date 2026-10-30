@@ -1,6 +1,6 @@
 /* ============================================================
    LicitaFácil — Design System v3
-   Escuro por padrão, texto sempre vivo, Inter + Syne, destaque ciano
+   Escuro por padrão, texto sempre vivo, Inter (sem fonte larga), destaque ciano
    ============================================================ */
 
 /* ─── Tokens ──────────────────────────────────────────────── */
@@ -29,7 +29,7 @@
   --muted:     #93a6cb;
 
   --font:      'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-h:    'Syne', 'Inter', system-ui, sans-serif;
+  --font-h:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; /* títulos com a mesma fonte do texto (a Syne parecia esticada) */
 
   --r-sm: 6px; --r: 10px; --r-lg: 14px; --r-xl: 20px;
 
@@ -113,7 +113,7 @@ a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 img, svg { display: block; max-width: 100%; }
 button { font: inherit; color: inherit; }
-h1, h2, h3, h4 { font-family: var(--font-h); font-weight: 700; line-height: 1.2; color: var(--text); }
+h1, h2, h3, h4 { font-family: var(--font-h); font-weight: 700; line-height: 1.2; color: var(--text); letter-spacing: -0.01em; }
 h1 { font-size: clamp(1.7rem, 4vw, 2.5rem); }
 h2 { font-size: 1.35rem; }
 h3 { font-size: 1.1rem; }
@@ -227,7 +227,7 @@ code, .mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
 /* ─── Cards ───────────────────────────────────────────────── */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 20px; }
 .card-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
-.card-title { font-size: 0.8rem; font-weight: 800; color: var(--text2); text-transform: uppercase; letter-spacing: 0.07em; }
+.card-title { font-size: 0.8rem; font-weight: 800; color: var(--text2); text-transform: uppercase; letter-spacing: 0.04em; }
 .card + .card { margin-top: 16px; }
 
 .stats-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
@@ -317,7 +317,7 @@ code, .mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
 }
 [data-theme="light"] .ia-card { background: linear-gradient(135deg, rgba(0,107,163,0.06), rgba(109,40,217,0.05)); border-color: rgba(0,107,163,0.3); }
 .ia-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-.ia-rotulo { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; }
+.ia-rotulo { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em; }
 .ia-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: pulso 1.8s infinite; }
 @keyframes pulso { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 .ia-texto { font-size: 0.98rem; color: var(--text); line-height: 1.75; white-space: pre-wrap; }
@@ -328,7 +328,7 @@ code, .mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
 .table-wrap { border: 1px solid var(--border); border-radius: var(--r-lg); overflow-x: auto; background: var(--surface); }
 .tabela { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .tabela thead { background: var(--surface2); }
-.tabela th { padding: 12px 14px; text-align: left; font-size: 0.74rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 0.07em; white-space: nowrap; border-bottom: 1px solid var(--border2); }
+.tabela th { padding: 12px 14px; text-align: left; font-size: 0.74rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; border-bottom: 1px solid var(--border2); }
 .tabela td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--text); }
 .tabela tbody tr:last-child td { border-bottom: none; }
 .tabela tbody tr:hover { background: rgba(0,212,255,0.035); }
@@ -356,7 +356,7 @@ code, .mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
 .contatos { display: flex; gap: 6px; flex-wrap: wrap; }
 .linha-detalhe td { background: var(--bg2); }
 .detalhes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px 18px; font-size: 0.85rem; }
-.detalhes-grid dt { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text3); }
+.detalhes-grid dt { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text3); }
 .detalhes-grid dd { color: var(--text); margin-bottom: 4px; word-break: break-word; }
 
 .lista-cards { display: none; flex-direction: column; gap: 10px; }
@@ -487,7 +487,7 @@ code, .mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
 .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
 .config-grid > .card + .card { margin-top: 0; }
 .plano-box { padding: 18px; background: var(--surface2); border-radius: var(--r-lg); text-align: center; margin-bottom: 14px; }
-.plano-box .plano-label { font-size: 0.74rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+.plano-box .plano-label { font-size: 0.74rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
 .plano-box .plano-nome { font-family: var(--font-h); font-size: 1.5rem; font-weight: 800; color: var(--text); margin-top: 4px; }
 .plano-box .plano-dias { font-size: 0.9rem; color: var(--accent); margin-top: 4px; font-weight: 700; }
 .plano-opcoes { display: flex; flex-direction: column; gap: 8px; }
@@ -645,7 +645,7 @@ code, .mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
 .imp-legenda span { display: inline-flex; align-items: center; gap: 6px; }
 .imp-legenda .pg-chip { min-width: 14px; width: 14px; height: 14px; padding: 0; border-radius: 4px; animation: none; }
 .imp-previa { margin-top: 16px; }
-.imp-previa h4 { font-size: 0.78rem; font-weight: 800; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+.imp-previa h4 { font-size: 0.78rem; font-weight: 800; color: var(--text2); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
 .imp-previa ul { list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; }
 .imp-previa li { padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); }
 .imp-modo { border: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -701,3 +701,10 @@ code, .mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
   .imp-tabela tbody td.num .preco, .imp-tabela tbody td.num .unid { display: inline; margin-right: 6px; }
   .imp-tabela tbody td.imp-sem-resultado { grid-column: 1 / -1; grid-row: auto; }
 }
+
+/* ─── Busca: quem tem o produto (resumo para a cotação) ─── */
+.quem-tem-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.quem-tem-item { background: var(--surface); border: 1px solid var(--border2); border-radius: var(--r-lg); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.quem-tem-nome { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.quem-tem-nome .nome { font-weight: 700; font-size: 0.98rem; text-align: left; }
+.quem-tem-ex { font-size: 0.84rem; color: var(--text2); line-height: 1.4; }

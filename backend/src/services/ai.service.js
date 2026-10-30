@@ -108,7 +108,74 @@ function textoDaResposta(j) {
   return String(c || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 }
 
-// Chama a IA tentando vários modelos gratuitos até um responder (e passar na validação, quando houver)
+// Lê a resposta em streaming (SSE do OpenRouter) guardando tudo o que chegou.
+// Para no fim, no prazo (parcial) ou se a IA ficar parada sem mandar nada (travada).
+async function lerStream(r, o) {
+  const leitor = r.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  let texto = '';
+  let motivo = null;
+  let erro = null;
+  let cortado = null;
+  let fim = false;
+  let ultimoConteudo = Date.now(); // comentários de "processando" não contam: só texto da resposta
+  let pendente = null;             // a leitura em andamento continua valendo depois de uma espera sem dados
+  while (!fim) {
+    const agora = Date.now();
+    const resta = o.prazoEm - agora;
+    if (resta <= 0) { cortado = 'prazo'; break; }
+    const semConteudo = o.paradoMs - (agora - ultimoConteudo);
+    if (semConteudo <= 0) { cortado = 'parado'; break; }
+    let timer = null;
+    const espera = new Promise(function (ok) { timer = setTimeout(function () { ok({ tempo: true }); }, Math.min(resta, semConteudo)); });
+    let pedaco;
+    if (!pendente) pendente = leitor.read().catch(function (e) { return { falha: e }; });
+    try {
+      pedaco = await Promise.race([pendente, espera]);
+    } finally { clearTimeout(timer); }
+    if (pedaco.tempo) continue;
+    pendente = null;
+    if (pedaco.falha) { erro = pedaco.falha; break; }
+    if (pedaco.done) break;
+    buf += dec.decode(pedaco.value, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const linha = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (!linha || linha.charAt(0) === ':' || linha.indexOf('data:') !== 0) continue; // comentários e "processando"
+      const dado = linha.slice(5).trim();
+      if (dado === '[DONE]') { fim = true; break; }
+      let j;
+      try { j = JSON.parse(dado); } catch (e) { continue; }
+      if (j.error) {
+        erro = new Error((j.error && j.error.message) || 'erro no meio da resposta');
+        erro.status = j.error && j.error.code;
+        fim = true;
+        break;
+      }
+      const c = j.choices && j.choices[0];
+      if (!c) continue;
+      const d = c.delta || c.message || {};
+      let novo = '';
+      if (typeof d.content === 'string') novo = d.content;
+      else if (Array.isArray(d.content)) novo = d.content.map(function (p) { return (p && (p.text || p.content)) || ''; }).join('');
+      if (novo) { texto += novo; ultimoConteudo = Date.now(); }
+      if (c.finish_reason) motivo = c.finish_reason;
+    }
+  }
+  try { await leitor.cancel(); } catch (e) { /* conexão já fechada */ }
+  try { o.controle.abort(); } catch (e) { /* idem */ }
+  return { texto: texto.replace(/<think>[\s\S]*?<\/think>/g, '').trim(), motivo: motivo, cortado: cortado, erro: erro };
+}
+
+function pausarSeFalhou(modelo, tarefa, minutos) {
+  pausar(modelo, minutos);
+  if (estado.bom[tarefa] === modelo) estado.bom[tarefa] = null;
+}
+
+// Chama a IA tentando vários modelos gratuitos até um responder (e passar na validação, quando houver).
+// opcoes.stream: lê em streaming e, se o prazo acabar no meio, devolve o que já chegou (motivo "parcial").
 async function chamarIA(mensagens, opcoes) {
   opcoes = opcoes || {};
   if (!configurada()) throw erroIA('IA não configurada (OPENROUTER_API_KEY ausente)', 'SEM_CHAVE');
@@ -119,7 +186,7 @@ async function chamarIA(mensagens, opcoes) {
   const tentados = [];
   for (const modelo of lista) {
     const resta = prazo - Date.now();
-    if (resta < 4000) { ultimo = ultimo + ' (tempo esgotado)'; break; }
+    if (resta < 8000) { ultimo = ultimo + ' (tempo esgotado)'; break; }
     tentados.push(modelo);
     const info = infoModelo(modelo);
     const params = info ? info.params : [];
@@ -129,9 +196,13 @@ async function chamarIA(mensagens, opcoes) {
       max_tokens: opcoes.maxTokens || 900,
       temperature: opcoes.temperatura == null ? 0.2 : opcoes.temperatura
     };
+    if (opcoes.stream) corpo.stream = true;
     if (params.indexOf('reasoning') >= 0) corpo.reasoning = { effort: 'low', exclude: true };
     if (opcoes.json && (params.indexOf('response_format') >= 0 || params.indexOf('structured_outputs') >= 0)) corpo.response_format = { type: 'json_object' };
     const inicio = Date.now();
+    const controle = new AbortController();
+    const limite = opcoes.stream ? resta : Math.min(opcoes.timeoutMs || (NA_VERCEL ? 45000 : 90000), resta);
+    const timer = setTimeout(function () { controle.abort(); }, limite);
     try {
       const r = await fetch(URL_CHAT, {
         method: 'POST',
@@ -142,7 +213,7 @@ async function chamarIA(mensagens, opcoes) {
           'X-Title': 'LicitaFacil'
         },
         body: JSON.stringify(corpo),
-        signal: AbortSignal.timeout(Math.min(opcoes.timeoutMs || (NA_VERCEL ? 45000 : 90000), resta))
+        signal: controle.signal
       });
       if (r.status === 401 || r.status === 403) {
         ultimo = 'chave do OpenRouter recusada (' + r.status + ')';
@@ -166,38 +237,50 @@ async function chamarIA(mensagens, opcoes) {
       }
       if (!r.ok) {
         ultimo = modelo + ' respondeu ' + r.status;
-        pausar(modelo, r.status >= 500 ? 5 : 15);
-        if (estado.bom[tarefa] === modelo) estado.bom[tarefa] = null;
+        pausarSeFalhou(modelo, tarefa, r.status >= 500 ? 5 : 15);
         continue;
       }
-      const j = await r.json();
-      const texto = textoDaResposta(j);
+      let texto;
+      let motivoFim;
+      if (opcoes.stream) {
+        const lido = await lerStream(r, { controle: controle, prazoEm: prazo - 3000, paradoMs: opcoes.paradoMs || 90000 });
+        texto = lido.texto;
+        motivoFim = lido.cortado ? 'parcial' : lido.motivo;
+        if (lido.erro && !texto) {
+          ultimo = modelo + ': ' + lido.erro.message;
+          pausarSeFalhou(modelo, tarefa, 5);
+          continue;
+        }
+        if (lido.erro) motivoFim = 'parcial';
+      } else {
+        const j = await r.json();
+        texto = textoDaResposta(j);
+        motivoFim = j && j.choices && j.choices[0] && j.choices[0].finish_reason;
+      }
       if (!texto) {
-        const motivo = j && j.choices && j.choices[0] && j.choices[0].finish_reason;
-        ultimo = modelo + ' respondeu vazio' + (motivo ? ' (' + motivo + ')' : '');
-        pausar(modelo, 10);
-        if (estado.bom[tarefa] === modelo) estado.bom[tarefa] = null;
+        ultimo = modelo + ' respondeu vazio' + (motivoFim ? ' (' + motivoFim + ')' : '');
+        pausarSeFalhou(modelo, tarefa, 10);
         continue;
       }
       let valor = texto;
       if (opcoes.validar) {
         try { valor = opcoes.validar(texto); } catch (errV) {
-          ultimo = modelo + ': ' + errV.message;
-          pausar(modelo, 5);
-          if (estado.bom[tarefa] === modelo) estado.bom[tarefa] = null;
+          ultimo = modelo + ': ' + errV.message + (motivoFim === 'parcial' ? ' (resposta incompleta no prazo)' : '');
+          pausarSeFalhou(modelo, tarefa, motivoFim === 'parcial' ? 3 : 5);
           continue;
         }
       }
       estado.bom[tarefa] = modelo;
       estado.ultimoSucesso = new Date().toISOString();
       if (estado.cota && estado.cota.restante > 0) estado.cota.restante--;
-      // motivo "length" = a resposta foi cortada pelo limite de tokens (página com muitos produtos)
-      const motivoFim = j && j.choices && j.choices[0] && j.choices[0].finish_reason;
+      // motivo "length" (limite de tokens) ou "parcial" (prazo): a resposta veio cortada (página com muitos produtos)
       return { texto: texto, valor: valor, modelo: modelo, ms: Date.now() - inicio, tentados: tentados, motivo: motivoFim || null };
     } catch (err) {
       if (err.code === 'CHAVE' || err.code === 'COTA') throw err;
-      ultimo = modelo + ': ' + (err.name === 'TimeoutError' ? 'tempo esgotado' : err.message);
-      pausar(modelo, err.name === 'TimeoutError' ? 3 : 5);
+      ultimo = modelo + ': ' + (err.name === 'AbortError' || err.name === 'TimeoutError' ? 'tempo esgotado' : err.message);
+      pausarSeFalhou(modelo, tarefa, err.name === 'AbortError' || err.name === 'TimeoutError' ? 3 : 5);
+    } finally {
+      clearTimeout(timer);
     }
   }
   estado.ultimoErro = ultimo;
@@ -346,20 +429,25 @@ async function perguntarIA(consulta, usuarioId, fornecedorId) {
 }
 
 // ─── Extração de catálogos ──────────────────────────────────────────────────
+// Formato compacto: cada tabela vem UMA vez (colunas + linhas) e o sistema transforma cada linha em produto.
+// Assim a resposta fica 3 a 5 vezes menor que um objeto por produto: mais rápida e sem estourar o limite.
 const FORMATO_JSON = '{"fornecedor":{"nome":"","cnpj":"","telefone":"","whatsapp":"","email":"","site":"","endereco":"","especialidade":""},' +
+  '"tabelas":[{"produto":"nome da linha/família, ex.: Cabo Flexível 750V","categoria":"","comum":{"marca":"","descricao":"","tensao":"","material":"",' +
+  '"isolamento":"","cobertura":"","temperatura":"","aplicacao":"","norma":"","certificacoes":"","unidade":""},' +
+  '"colunas":["Seção (mm²)","Diâmetro externo (mm)","Peso (kg/km)"],"linhas":[["1,5","2,9","19"],["2,5","3,4","31"]]}],' +
   '"produtos":[{"nome":"","codigo":"","marca":"","categoria":"","descricao":"","bitola":"","tensao":"","material":"","isolamento":"",' +
   '"cobertura":"","temperatura":"","aplicacao":"","norma":"","certificacoes":"","preco":"","unidade":"","atributos":{}}],"resumo_pagina":""}';
 
 const REGRAS = [
   'Regras:',
-  '1. Liste TODOS os produtos. Em tabelas, CADA LINHA é um produto separado (cada medida, seção, cor, capacidade ou tamanho).',
-  '2. "nome": nome completo do produto + a variação da linha. Ex.: "Cabo Flexível 750V 2,5 mm²", "Disjuntor DIN Curva C 20A", "Luva Isolante Classe 2 Tam. 10".',
-  '3. Informações que valem para a tabela ou família inteira (tensão, temperatura, norma, material, isolação, cobertura, aplicação, marca) vão em TODOS os produtos dela.',
-  '4. Colunas sem campo próprio (diâmetro externo, espessura, peso, embalagem, cores disponíveis, corrente, resistência, código de cor etc.) vão em "atributos", com o nome da coluna e a unidade. Ex.: {"Diâmetro externo (mm)":"3,4","Peso (kg/100 m)":"3,1","Embalagem":"rolo 100 m","Cores":"preto, azul, verde"}.',
-  '5. Copie números, medidas, códigos, normas e preços EXATAMENTE como impressos (vírgula decimal, mm², kV, NBR). Nunca invente. OMITA os campos sem informação (não escreva campos vazios): a resposta fica menor e cabem mais produtos.',
+  '1. Extraia TODOS os produtos da página, sem pular nenhum. Cada medida, seção, bitola, cor, tamanho, capacidade, corrente ou modelo é um produto.',
+  '2. TABELAS vão em "tabelas": "produto" = nome da linha/família (ex.: "Cabo Flexível 750V", "Disjuntor DIN Curva C", "Luva Isolante Classe 2"); "colunas" = TODOS os cabeçalhos da tabela, na ordem, com a unidade (ex.: "Seção (mm²)", "Código", "Corrente (A)", "Preço (R$)"); "linhas" = os valores de CADA linha, na mesma ordem das colunas (use "" quando a célula estiver vazia). A primeira coluna deve ser a que diferencia os produtos (seção, bitola, modelo, tamanho ou código).',
+  '3. O que vale para a família inteira (tensão, norma, material, isolação, cobertura, temperatura, aplicação, marca, descrição, unidade) vai UMA vez em "comum".',
+  '4. Produtos que NÃO estão em tabela (cartões, fotos com descrição, listas) vão em "produtos", com o "nome" completo + a variação. Colunas/dados sem campo próprio vão em "atributos" (nome com unidade).',
+  '5. Copie números, medidas, códigos, normas e preços EXATAMENTE como impressos (vírgula decimal, mm², kV, NBR). Nunca invente. OMITA os campos sem informação.',
   '6. "fornecedor": só o que estiver escrito (nome/logo da empresa, CNPJ, telefones, WhatsApp, e-mail, site, endereço) e, em "especialidade", 1 frase do que a empresa vende.',
-  '7. Sem produtos (capa, apresentação, índice): "produtos": [] e "resumo_pagina" com 1 frase.',
-  '8. Não repita produtos. Siga a ordem em que aparecem na página. Responda SOMENTE o JSON, sem markdown e sem comentários.'
+  '7. Página sem produtos (capa, apresentação, índice): "tabelas": [], "produtos": [] e "resumo_pagina" com 1 frase.',
+  '8. Siga a ordem da página. Responda SOMENTE o JSON, sem markdown e sem comentários.'
 ].join('\n');
 
 const PROMPT_VISAO = 'Você extrai dados de catálogos técnicos de fornecedores brasileiros (materiais elétricos, fios e cabos, EPI, ferramentas, hidráulica, construção, informática e outros). ' +
@@ -369,6 +457,11 @@ const PROMPT_VISAO = 'Você extrai dados de catálogos técnicos de fornecedores
 const PROMPT_TEXTO = 'Você extrai dados de catálogos técnicos de fornecedores brasileiros. Você recebe o TEXTO de uma parte do catálogo ' +
   '(lido por OCR ou copiado do PDF: pode ter erros de leitura e colunas de tabelas misturadas; reconstrua as tabelas com cuidado e não invente).\n\n' +
   'Devolva SOMENTE um objeto JSON válido neste formato:\n' + FORMATO_JSON + '\n\n' + REGRAS;
+
+// Prazos da leitura de catálogo: na Vercel (Fluid compute) a função pode durar até 300 s; o streaming devolve o que
+// já chegou se o prazo acabar (o navegador pede o resto). Fora da Vercel (Render/local) o prazo é maior.
+const PRAZO_EXTRACAO = parseInt(process.env.IA_PRAZO_EXTRACAO_MS || (NA_VERCEL ? '270000' : '600000'), 10);
+const PARADO_EXTRACAO = parseInt(process.env.IA_PARADO_MS || '90000', 10);
 
 function validarExtracao(texto) {
   const r = extrator.normalizarResultadoIA(texto);
@@ -392,33 +485,44 @@ async function extrairPagina(opcoes) {
   partes.push({ type: 'text', text: instrucao });
   partes.push({ type: 'image_url', image_url: { url: opcoes.imagem } });
   const r = await chamarIA([{ role: 'system', content: PROMPT_VISAO }, { role: 'user', content: partes }], {
-    tarefa: 'visao', json: true, maxTokens: 8192, temperatura: 0, validar: validarExtracao,
-    timeoutMs: NA_VERCEL ? 48000 : 120000, prazoMs: NA_VERCEL ? 54000 : 180000, tentativas: 3, evitar: opcoes.evitar
+    tarefa: 'visao', json: true, maxTokens: 8192, temperatura: 0, validar: validarExtracao, stream: true,
+    prazoMs: PRAZO_EXTRACAO, paradoMs: PARADO_EXTRACAO, tentativas: 3, evitar: opcoes.evitar
   });
   const v = r.valor || {};
   const produtos = v.produtos || [];
-  if (r.motivo === 'length' && !produtos.length) {
+  const cortada = r.motivo === 'length' || r.motivo === 'parcial';
+  if (cortada && !produtos.length) {
     // cortada antes do primeiro produto: não dá para continuar; o navegador tenta de novo com outro modelo
     const e = erroIA('IA indisponível: ' + r.modelo + ' cortou a resposta antes do primeiro produto', 'INDISPONIVEL');
     e.tentados = [r.modelo];
     throw e;
   }
   // resposta cortada pelo limite de tokens: o navegador pede o resto da página a partir do último produto lido
-  const incompleto = r.motivo === 'length' && produtos.length > 0;
+  const incompleto = cortada && produtos.length > 0;
   return Object.assign({ modelo: r.modelo, ms: r.ms, incompleto: incompleto, ultimo: incompleto ? produtos[produtos.length - 1].nome : '' }, v);
 }
 
 // Um bloco de texto do catálogo → { fornecedor, produtos, resumo, modelo }
 async function estruturarTexto(texto, opcoes) {
   opcoes = opcoes || {};
+  let pedido = (opcoes.contexto ? 'Contexto do trecho anterior: ' + String(opcoes.contexto).slice(0, 300) + '\n\n' : '') + String(texto || '').slice(0, 16000);
+  const continuar = String(opcoes.continuarApos || '').trim().slice(0, 200);
+  if (continuar) {
+    pedido = 'ATENÇÃO: este trecho já foi lido em parte e a lista anterior foi cortada no produto "' + continuar + '". ' +
+      'Liste SOMENTE os produtos que vêm DEPOIS dele (não repita os anteriores).\n\n' + pedido;
+  }
   const r = await chamarIA([
     { role: 'system', content: PROMPT_TEXTO },
-    { role: 'user', content: (opcoes.contexto ? 'Contexto do trecho anterior: ' + String(opcoes.contexto).slice(0, 300) + '\n\n' : '') + String(texto || '').slice(0, 16000) }
+    { role: 'user', content: pedido }
   ], {
-    tarefa: 'texto', json: true, maxTokens: 8192, temperatura: 0, validar: validarExtracao,
-    timeoutMs: NA_VERCEL ? 48000 : 120000, prazoMs: NA_VERCEL ? 54000 : 180000, tentativas: 3, evitar: opcoes.evitar
+    tarefa: 'texto', json: true, maxTokens: 8192, temperatura: 0, validar: validarExtracao, stream: true,
+    prazoMs: PRAZO_EXTRACAO, paradoMs: PARADO_EXTRACAO, tentativas: 3, evitar: opcoes.evitar
   });
-  return Object.assign({ modelo: r.modelo, ms: r.ms }, r.valor);
+  const v = r.valor || {};
+  const produtos = v.produtos || [];
+  const cortada = r.motivo === 'length' || r.motivo === 'parcial';
+  const incompleto = cortada && produtos.length > 0;
+  return Object.assign({ modelo: r.modelo, ms: r.ms, incompleto: incompleto, ultimo: incompleto ? produtos[produtos.length - 1].nome : '' }, v);
 }
 
 // Compatibilidade com a fila antiga (Render): estrutura o texto inteiro em blocos e devolve no formato do Prompt Mestre

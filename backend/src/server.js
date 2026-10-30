@@ -12,7 +12,7 @@ const { query } = require('./utils/db');
 const { migrar } = require('./utils/migrar');
 const indexacao = require('./services/indexacao.service');
 
-const VERSAO = '3.2.0';
+const VERSAO = '3.3.0';
 process.env.APP_VERSION = VERSAO;
 
 const app = express();

@@ -222,7 +222,7 @@ function htmlContatos(f, opcoes) {
   if (f.email) {
     var assunto = opcoes.produto ? '?subject=' + encodeURIComponent('Cotação — ' + opcoes.produto) : '';
     partes.push('<a class="btn btn-secondary btn-sm" href="mailto:' + esc(f.email) + esc(assunto) + '" title="Enviar e-mail">' + ICONES.email +
-      '<span' + (opcoes.compacto ? ' class="sr-only"' : '') + '>' + (opcoes.compacto ? 'E-mail' : esc(f.email)) + '</span></a>');
+      '<span' + (opcoes.compacto ? ' class="sr-only"' : '') + '>' + (opcoes.compacto || opcoes.emailCurto ? 'E-mail' : esc(f.email)) + '</span></a>');
   }
   return partes.length ? '<div class="contatos">' + partes.join('') + '</div>' : '<span class="text-sm text-muted">Sem contato cadastrado</span>';
 }
@@ -474,7 +474,7 @@ function buscar(opcoes) {
   var btn = $('btn-buscar');
   setLoading(btn, true, 'Buscando…');
   html('resultados', carregando('Procurando “' + q + '” nos catálogos…'));
-  return apiPost('/api/busca', { consulta: q, limite: 10, limite_produtos: 60 }, { timeout: 60000 }).then(function (r) {
+  return apiPost('/api/busca', { consulta: q, limite: 30, limite_produtos: 100 }, { timeout: 60000 }).then(function (r) {
     if (seq !== ESTADO.buscaSeq) return null;
     renderResultados(r, q);
     return r;
@@ -521,6 +521,24 @@ function cardResultadoProduto(p, re) {
       htmlContatos(p.fornecedor, { produto: p.nome + (p.codigo ? ' (cód. ' + p.codigo + ')' : '') }) + '</div>' +
     '</div>';
 }
+// Resumo para cotação: quais fornecedores cadastrados têm o produto buscado, com o contato de cada um.
+// A mensagem do WhatsApp/e-mail cita o produto mais parecido daquele fornecedor (ou o que foi buscado).
+function htmlQuemTem(lista, q, produtos) {
+  var melhor = {};
+  (produtos || []).forEach(function (p) {
+    var id = p.fornecedor && p.fornecedor.id;
+    if (id && !melhor[id]) melhor[id] = p.nome + (p.codigo ? ' (cód. ' + p.codigo + ')' : '');
+  });
+  return '<div class="quem-tem mb-4"><div class="secao-titulo"><h3>' + numero(lista.length) + ' ' +
+    plural(lista.length, 'fornecedor tem', 'fornecedores têm') + ' “' + esc(q) + '”</h3>' +
+    '<span class="contagem">contato direto para a cotação</span></div><div class="quem-tem-lista">' + lista.map(function (f) {
+      var exemplo = melhor[f.fornecedor_id] || '';
+      return '<div class="quem-tem-item"><div class="quem-tem-nome"><button type="button" class="link-btn nome" data-acao="ver-fornecedor" data-id="' + esc(f.fornecedor_id) + '">' +
+        esc(f.nome) + '</button><span class="badge badge-blue">' + numero(f.produtos_encontrados) + ' ' + plural(f.produtos_encontrados, 'produto', 'produtos') + '</span></div>' +
+        (exemplo ? '<div class="quem-tem-ex">' + esc(exemplo) + '</div>' : '') +
+        htmlContatos(f, { emailCurto: true, produto: exemplo || q }) + '</div>';
+    }).join('') + '</div></div>';
+}
 // Fornecedores cujo nome ou especialidade combinam com a busca (mesmo sem catálogo)
 function htmlRelacionados(lista, re, titulo) {
   if (!lista.length) return '';
@@ -550,13 +568,15 @@ function renderResultados(r, q) {
       return;
     }
     var semCatalogo = ESTADO.stats && ESTADO.stats.total_catalogos === 0;
-    html('resultados', caixaVazia(ICONES.busca, semCatalogo ? 'Ainda não há catálogos para buscar' : 'Nada encontrado para “' + q + '”',
+    html('resultados', caixaVazia(ICONES.busca, semCatalogo ? 'Ainda não há catálogos para buscar' : 'Nenhum fornecedor cadastrado tem “' + q + '”',
       semCatalogo ? 'Importe o catálogo de um fornecedor e a busca passa a encontrar os produtos dele.'
         : 'Tente só a medida (ex.: <strong>2,5mm</strong>), só a norma ou só o código. Confira também se o catálogo do fornecedor já foi importado.',
       '<button type="button" class="btn btn-primary" data-acao="ir" data-secao="importar">' + ICONES.enviar + 'Importar catálogo</button>'));
     return;
   }
   var partes = [];
+  var comProduto = (r.fornecedores || []).filter(function (f) { return f.produtos_encontrados > 0; });
+  if (comProduto.length) partes.push(htmlQuemTem(comProduto, q, produtos));
   if (produtos.length) {
     partes.push('<div class="secao-titulo"><h3>Produtos encontrados</h3><span class="contagem">' +
       (r.total_produtos > produtos.length ? 'mostrando ' + produtos.length + ' de ' + numero(r.total_produtos) : numero(produtos.length) + ' ' + plural(produtos.length, 'produto', 'produtos')) +
@@ -1063,14 +1083,18 @@ function organizarComIA(cid) {
   renderCatalogos();
   var base = '/api/fornecedores/' + f.id + '/catalogo/' + cid + '/estruturar';
   var contexto = '';
+  var continuarApos = '';
+  var continuacoes = 0;
   function proxima() {
     if (org.parar || org.parte >= org.total) return Promise.resolve();
-    return apiPost(base, { parte: org.parte, contexto: contexto }, { timeout: 80000 }).then(function (r) {
+    return apiPost(base, { parte: org.parte, contexto: contexto, continuar_apos: continuarApos }, { timeout: 295000 }).then(function (r) {
       // a API responde ok:false quando a IA gratuita falha (cota, modelo ocupado)
       if (r && r.ok === false) throw { error: r.error, code: r.code, status: r.code === 'COTA' ? 429 : 502 };
       org.produtos = r.total_produtos;
-      org.parte = r.parte + 1;
       org.falhasSeguidas = 0;
+      // parte com produtos demais: a IA continua de onde parou antes de ir para a próxima parte
+      if (r.incompleto && r.ultimo && continuacoes < 6) { continuarApos = r.ultimo; continuacoes++; }
+      else { org.parte = r.parte + 1; continuarApos = ''; continuacoes = 0; }
       contexto = r.resumo || '';
       atualizarProgressoOrganizar();
       return proxima();

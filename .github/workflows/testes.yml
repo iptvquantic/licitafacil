@@ -48,6 +48,6 @@ jobs:
       - name: Testar a leitura com IA (OpenRouter simulado)
         run: |
           node testes/mock-openrouter.js > mock.log 2>&1 &
-          OPENROUTER_API_KEY=chave-teste OPENROUTER_BASE_URL=http://localhost:4010 PORT=3001 node backend/src/server.js > api-ia.log 2>&1 &
+          OPENROUTER_API_KEY=chave-teste OPENROUTER_BASE_URL=http://localhost:4010 IA_PARADO_MS=3000 IA_PRAZO_EXTRACAO_MS=30000 PORT=3001 node backend/src/server.js > api-ia.log 2>&1 &
           for i in $(seq 1 30); do curl -sf localhost:3001/api/health > /dev/null && break; sleep 1; done
           BASE=http://localhost:3001 node testes/ia.test.js || (echo '--- log da API ---'; cat api-ia.log; echo '--- log do mock ---'; cat mock.log; exit 1)

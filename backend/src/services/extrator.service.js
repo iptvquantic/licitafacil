@@ -144,7 +144,7 @@ function normalizarSite(s) {
   if (!t) return '';
   var m = t.match(/^(?:https?:\/\/)?((?:[a-z0-9-]+\.)+[a-z]{2,})(\/[^\s]*)?$/i);
   if (!m) return '';
-  var host = m[1].toLowerCase();
+  var host = m[1].toLowerCase().replace(/^w{4,}\./, 'www.');
   if (/^(gmail|hotmail|outlook|yahoo|uol|bol|terra|live|icloud)\./.test(host)) return '';
   return 'https://' + host + (m[2] && m[2] !== '/' ? m[2] : '');
 }
@@ -351,6 +351,36 @@ function dividirBlocos(texto, tamanho) {
 }
 
 // JSON da IA: tolera cercas de código, texto antes/depois e resposta cortada no meio de um produto
+// JSON cortado no meio (limite de tokens ou prazo): fecha no último objeto/lista completo, em qualquer profundidade.
+// Uma linha de tabela pela metade é descartada (melhor que uma linha com colunas trocadas).
+function repararJSONCortado(s) {
+  var pilha = [];
+  var emTexto = false;
+  var escape = false;
+  var cortes = [];
+  for (var i = 0; i < s.length; i++) {
+    var ch = s.charAt(i);
+    if (emTexto) {
+      if (escape) escape = false;
+      else if (ch === '\\') escape = true;
+      else if (ch === '"') emTexto = false;
+      continue;
+    }
+    if (ch === '"') { emTexto = true; continue; }
+    if (ch === '{' || ch === '[') pilha.push(ch);
+    else if (ch === '}' || ch === ']') {
+      pilha.pop();
+      if (pilha.length) cortes.push({ pos: i + 1, pilha: pilha.slice() });
+    }
+  }
+  for (var k = cortes.length - 1; k >= 0 && k >= cortes.length - 400; k--) {
+    var c = cortes[k];
+    var fecha = c.pilha.slice().reverse().map(function (x) { return x === '{' ? '}' : ']'; }).join('');
+    try { return JSON.parse(s.slice(0, c.pos) + fecha); } catch (e) { /* tenta o corte anterior */ }
+  }
+  return null;
+}
+
 function parseJSONTolerante(texto) {
   var s = String(texto || '').replace(/```(?:json)?/gi, '').trim();
   var ini = s.indexOf('{');
@@ -361,24 +391,85 @@ function parseJSONTolerante(texto) {
   if (fim > comeco) {
     try { return JSON.parse(s.slice(comeco, fim + 1)); } catch (e) { /* tenta consertar abaixo */ }
   }
-  // cortado: fecha no último produto completo
-  var corpo = s.slice(comeco);
-  var ultimo = corpo.lastIndexOf('},');
-  while (ultimo > 0) {
-    var tentativa = corpo.slice(0, ultimo + 1);
-    var abertos = [];
-    var emTexto = false;
-    for (var i = 0; i < tentativa.length; i++) {
-      var ch = tentativa[i];
-      if (ch === '"' && tentativa[i - 1] !== '\\') emTexto = !emTexto;
-      if (emTexto) continue;
-      if (ch === '{' || ch === '[') abertos.push(ch);
-      else if (ch === '}' || ch === ']') abertos.pop();
-    }
-    var fecha = abertos.reverse().map(function (c) { return c === '{' ? '}' : ']'; }).join('');
-    try { return JSON.parse(tentativa + fecha); } catch (e) { ultimo = corpo.lastIndexOf('},', ultimo - 1); }
-  }
+  return repararJSONCortado(s.slice(comeco));
+}
+
+// ─── Tabelas (formato compacto da IA): cada linha vira um produto ─────────────
+// Cabeçalho da coluna → campo do produto (o resto vira atributo com o nome da coluna)
+function campoDaColuna(cab) {
+  var k = chave(cab).replace(/\b(mm2|mm|kv|v|a|kg|km|m|r|un|und|pc|pcs)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/^(cod|codigo|code|ref|referencia|reference|sku|part number|item|modelo|model|cat|catalogo)( .*)?$/.test(k)) return 'codigo';
+  if (/^(secao|secao nominal|bitola|formacao|dimensao|dimensoes|medida|medidas|tamanho|size|calibre|awg|condutores x secao|n x secao|no de condutores x secao)( .*)?$/.test(k)) return 'bitola';
+  if (/^(tensao|tensao nominal|voltagem|voltage|tensao de isolamento)( .*)?$/.test(k)) return 'tensao';
+  if (/^(preco|valor|price|preco unitario|preco unit)( .*)?$/.test(k)) return 'preco';
+  if (/^(norma|normas|standard)( .*)?$/.test(k)) return 'norma';
+  if (/^(descricao|description|produto|nome|especificacao)( .*)?$/.test(k)) return 'descricao';
+  if (/^(material|material condutor|condutor)$/.test(k)) return 'material';
+  if (/^(isolacao|isolamento|insulation)( .*)?$/.test(k)) return 'isolamento';
+  if (/^(cobertura|capa)( .*)?$/.test(k)) return 'cobertura';
+  if (/^(temperatura|temp)( .*)?$/.test(k)) return 'temperatura';
+  if (/^(marca|fabricante|brand)$/.test(k)) return 'marca';
+  if (/^(unidade|unid|un de venda|unidade de venda)$/.test(k)) return 'unidade';
   return null;
+}
+
+function unidadeDoCabecalho(cab) {
+  var m = String(cab || '').match(/\(([^)]{1,12})\)\s*$/);
+  return m ? m[1].trim() : '';
+}
+
+function comUnidade(valor, cab) {
+  var v = String(valor == null ? '' : valor).trim();
+  var u = unidadeDoCabecalho(cab);
+  var semVezes = v.replace(/(\d)\s*[xX×]\s*(?=\d)/g, '$1 '); // "3x2,5" não tem unidade: o "x" é de vezes
+  if (!v || !u || /[a-zA-Z²µΩ°"]/.test(semVezes) || /^r\$$/i.test(u)) return v;
+  return v + ' ' + u;
+}
+
+function expandirTabela(t) {
+  if (!t || typeof t !== 'object') return [];
+  var colunas = Array.isArray(t.colunas || t.columns || t.cabecalho) ? (t.colunas || t.columns || t.cabecalho) : [];
+  var linhas = Array.isArray(t.linhas || t.rows || t.dados) ? (t.linhas || t.rows || t.dados) : [];
+  var familia = limparTexto(t.produto || t.nome || t.familia || t.titulo || t.product || '', 200);
+  var comum = (t.comum && typeof t.comum === 'object') ? t.comum : {};
+  if (!colunas.length || !linhas.length) return [];
+  var campos = colunas.map(function (c) { return campoDaColuna(c); });
+  var chaveIdx = 0;
+  if (campos[0] === 'codigo' && colunas.length > 1 && campos[1] !== 'preco') chaveIdx = 1;
+  var out = [];
+  linhas.forEach(function (linha) {
+    if (!Array.isArray(linha)) {
+      if (linha && typeof linha === 'object') linha = colunas.map(function (c) { return linha[c]; });
+      else return;
+    }
+    if (!linha.some(function (v) { return String(v == null ? '' : v).trim(); })) return;
+    var p = { atributos: {} };
+    Object.keys(comum).forEach(function (k) { p[k] = comum[k]; });
+    if (t.categoria) p.categoria = t.categoria;
+    var nomeDaLinha = '';
+    colunas.forEach(function (cab, i) {
+      var v = linha[i];
+      if (v == null || String(v).trim() === '') return;
+      var campo = campos[i];
+      if (campo === 'bitola' || campo === 'tensao') p[campo] = comUnidade(v, cab);
+      else if (campo === 'preco') p.preco = /r\$/i.test(String(v)) || !/r\$/i.test(cab) ? String(v) : 'R$ ' + String(v);
+      else if (campo === 'descricao') nomeDaLinha = String(v); // coluna "Descrição/Produto": é o nome de cada linha
+      else if (campo) p[campo] = String(v);
+      else p.atributos[limparTexto(cab, 60)] = String(v);
+    });
+    var nome;
+    if (nomeDaLinha) {
+      nome = nomeDaLinha;
+      if (familia && T.normalizarBusca(nomeDaLinha).indexOf(T.normalizarBusca(familia)) < 0) p.descricao = p.descricao || familia;
+    } else {
+      var variante = linha[chaveIdx] != null && String(linha[chaveIdx]).trim() !== '' ? comUnidade(linha[chaveIdx], colunas[chaveIdx]) : '';
+      nome = familia || limparTexto(comum.descricao || '', 120) || 'Produto';
+      if (variante && campos[chaveIdx] !== 'bitola' && T.normalizarBusca(nome).indexOf(T.normalizarBusca(variante)) < 0) nome = nome + ' ' + variante;
+    }
+    p.nome = nome; // a medida (bitola) entra no nome em normalizarProduto
+    out.push(p);
+  });
+  return out;
 }
 
 // Saída da IA (objeto ou texto) → { fornecedor, produtos, resumo }
@@ -387,7 +478,10 @@ function normalizarResultadoIA(saida) {
   if (!dados) return null;
   var lista = Array.isArray(dados) ? dados : (dados.produtos || dados.products || dados.itens || dados.items || []);
   if (!Array.isArray(lista)) lista = [];
-  var produtos = mesclarProdutos([lista]);
+  var tabelas = !Array.isArray(dados) && Array.isArray(dados.tabelas || dados.tables) ? (dados.tabelas || dados.tables) : [];
+  var daTabela = [];
+  tabelas.forEach(function (t) { daTabela = daTabela.concat(expandirTabela(t)); });
+  var produtos = mesclarProdutos([daTabela, lista]);
   var fornecedor = Array.isArray(dados) ? null : normalizarFornecedor(dados.fornecedor || dados.supplier || dados.empresa || null);
   var resumo = Array.isArray(dados) ? '' : limparTexto(dados.resumo_pagina || dados.resumo || dados.summary || '', 400);
   return { fornecedor: fornecedor, produtos: produtos, resumo: resumo };
@@ -403,6 +497,8 @@ module.exports = {
   mesclarProdutos: mesclarProdutos,
   dividirBlocos: dividirBlocos,
   parseJSONTolerante: parseJSONTolerante,
+  repararJSONCortado: repararJSONCortado,
+  expandirTabela: expandirTabela,
   normalizarResultadoIA: normalizarResultadoIA,
   cnpjValido: cnpjValido,
   formatarCNPJ: formatarCNPJ,

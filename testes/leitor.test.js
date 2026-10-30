@@ -80,5 +80,22 @@ check(E.compararFornecedores({ nome: 'Energy Fios e Cabos' }, [{ id: 3, nome: 'E
 check(E.nomePorSiteOuArquivo('https://www.energycondutores.com.br', 'x.pdf') === 'Energycondutores' && E.nomePorSiteOuArquivo('', 'Catálogo-Energy.pdf') === 'Energy', 'nome provável pelo site ou pelo arquivo');
 check(E.dividirBlocos('a'.repeat(50) + '\n' + 'b'.repeat(50), 60).length === 2, 'texto dividido em blocos por linha');
 
+// formato compacto da IA: tabela → um produto por linha
+const tab = { produto: 'Cabo Flexível 750V', categoria: 'Cabos flexíveis', comum: { tensao: '450/750 V', norma: 'ABNT NBR NM 247-3' },
+  colunas: ['Seção (mm²)', 'Diâmetro externo (mm)', 'Peso (kg/km)'], linhas: [['1,5', '2,9', '19'], ['2,5', '3,4', '31'], ['', '', '']] };
+const exp = E.normalizarResultadoIA({ tabelas: [tab, { produto: 'Disjuntor DIN Curva C', colunas: ['Código', 'Corrente (A)', 'Preço (R$)'], linhas: [['DJ-C10', '10', '16,90']] },
+  { colunas: ['Código', 'Descrição', 'Norma'], linhas: [['QD-12', 'Quadro de distribuição 12 disjuntores', 'NBR IEC 60670']] }], produtos: [{ nome: 'Luva Isolante Classe 2' }] }).produtos;
+check(exp.length === 5, 'tabelas + produtos soltos: 5 produtos (linha vazia ignorada)', exp.map(function (p) { return p.nome; }));
+check(exp[1].nome === 'Cabo Flexível 750V 2,5 mm²' && exp[1].bitola === '2,5 mm²' && exp[1].tensao === '450/750 V' && exp[1].norma === 'ABNT NBR NM 247-3' &&
+  exp[1].categoria === 'Cabos flexíveis' && exp[1].atributos['Peso (kg/km)'] === '31', 'linha da tabela: medida no nome, dados comuns e colunas', exp[1]);
+check(exp[2].nome === 'Disjuntor DIN Curva C 10 A' && exp[2].codigo === 'DJ-C10' && exp[2].preco === 'R$ 16,90', 'tabela com código: variação no nome, código e preço', exp[2]);
+check(exp[3].nome === 'Quadro de distribuição 12 disjuntores' && exp[3].codigo === 'QD-12' && exp[3].norma === 'NBR IEC 60670', 'coluna Descrição vira o nome da linha', exp[3]);
+check(E.expandirTabela({ produto: 'Cabo de Controle', colunas: ['Formação (mm²)'], linhas: [['3x1,5']] })[0].bitola === '3x1,5 mm²', '"3x1,5" ganha a unidade (o x é de vezes)');
+// resposta cortada (limite de tokens ou prazo): aproveita as linhas completas
+const inteiro = JSON.stringify({ fornecedor: { nome: 'Energy' }, tabelas: [tab] });
+const cortado = E.normalizarResultadoIA(inteiro.slice(0, inteiro.indexOf('["2,5"') + 9));
+check(cortado && cortado.produtos.length === 1 && cortado.produtos[0].bitola === '1,5 mm²' && cortado.fornecedor.nome === 'Energy', 'JSON cortado no meio de uma linha: fica a linha completa', cortado);
+check(E.normalizarSite('wwww.energycondutores.com.br') === 'https://www.energycondutores.com.br', 'site com "wwww" lido errado é corrigido');
+
 console.log('\nRESULTADO LEITOR: ' + ok + ' ok, ' + falhas + ' falha(s)');
 process.exit(falhas ? 1 : 0);

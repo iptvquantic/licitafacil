@@ -265,6 +265,16 @@ async function salvarCatalogo(page, area) {
     const r = await salvarCatalogo(page, area);
     esperar(/6 produtos salvos/.test(r), 'resultado: ' + r);
   }, page);
+  await passo('a IA trava no meio da página: o que chegou é aproveitado e o resto é pedido de novo', async () => {
+    await page.click('#aba-adicionar');
+    await page.waitForSelector('#painel-adicionar:not(.hidden) #imp-entrada-fornecedor:not(.hidden)');
+    const area = await lerCatalogo(page, 'fornecedor', { name: 'tabela-lenta.pdf', mimeType: 'application/pdf', buffer: fs.readFileSync(path.join(ARQ, 'catalogo-escaneado-epi.pdf')) });
+    const t = await texto(page, area);
+    esperar(/Encontrei 6 produtos/.test(t) && !/incompleta/.test(t), 'conferência: ' + t.slice(0, 300));
+    esperar(await page.locator('#imp-tbody tr', { hasText: '8x0,5 mm²' }).count() === 1, 'última linha da tabela não veio');
+    const r = await salvarCatalogo(page, area);
+    esperar(/6 produtos salvos/.test(r), 'resultado: ' + r);
+  }, page);
   await passo('o mesmo catálogo de novo (saindo da tela no meio): avisa que o fornecedor já existe', async () => {
     await page.click('#nav-importar');
     await page.waitForSelector('#imp-entrada-importar:not(.hidden)');
@@ -315,6 +325,8 @@ async function salvarCatalogo(page, area) {
     const t = await texto(page, '#resultados .tabela tbody tr');
     esperar(/PP-325/.test(t), 'primeiro resultado: ' + t);
     esperar(await page.locator('#resultados mark').count() > 0, 'sem destaque dos termos');
+    const quem = await texto(page, '#resultados .quem-tem');
+    esperar(/fornecedores têm/.test(quem) && /Flex Fast/.test(quem) && /Energy/.test(quem), 'resumo de quem tem o produto: ' + quem);
     const linhaFlex = page.locator('#resultados .tabela tbody tr', { hasText: 'Flex Fast' }).first();
     const wa = await linhaFlex.locator('a.btn-whats').first().getAttribute('href');
     esperar(/^https:\/\/wa\.me\/5511957808642\?text=/.test(wa), 'link do WhatsApp: ' + wa);
@@ -332,7 +344,7 @@ async function salvarCatalogo(page, area) {
   await passo('exemplo vazio mostra mensagem útil', async () => {
     await page.click('.chip-btn:has-text("cimento CP-III")');
     await page.waitForSelector('#resultados .empty-box', { timeout: 15000 });
-    esperar(/Nada encontrado/.test(await texto(page, '#resultados')), 'mensagem de vazio');
+    esperar(/Nenhum fornecedor cadastrado tem “cimento CP-III”/.test(await texto(page, '#resultados')), 'mensagem de vazio diz que nenhum fornecedor tem o produto');
   }, page);
   await passo('perguntar à IA responde com fornecedor citado', async () => {
     await page.fill('#campo-busca', 'quem tem cabo PP 3x2,5mm?');

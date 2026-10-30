@@ -149,6 +149,7 @@ async function partesDoCatalogo(opcoes) {
 }
 
 // Organiza com a IA uma parte do texto salvo. A parte 0 recomeça a tabela de produtos do catálogo.
+// continuarApos: a parte tinha produtos demais e a resposta anterior foi cortada; lê o resto sem apagar nada.
 async function estruturarParte(opcoes) {
   if (!ia.configurada()) throw new ErroLeitura('A IA não está configurada no servidor.', 503);
   const c = await catalogoComTexto(opcoes.fornecedorId, opcoes.catalogoId, opcoes.usuarioId);
@@ -157,25 +158,26 @@ async function estruturarParte(opcoes) {
   const parte = Math.max(0, parseInt(opcoes.parte, 10) || 0);
   if (!total) throw new ErroLeitura('O texto deste catálogo é curto demais para a IA organizar.');
   if (parte >= total) throw new ErroLeitura('Esta parte não existe.');
-  if (parte === 0) {
+  const continuar = String(opcoes.continuarApos || '').slice(0, 200);
+  if (parte === 0 && !continuar) {
     await db.query("UPDATE catalogos SET ia_status = 'estruturando', ia_info = $1, atualizado_em = NOW() WHERE id = $2",
       ['A IA está lendo a parte 1 de ' + total + '…', c.id]);
   }
   let r;
   try {
-    r = await ia.estruturarTexto(blocos[parte], { contexto: opcoes.contexto });
+    r = await ia.estruturarTexto(blocos[parte], { contexto: opcoes.contexto, continuarApos: continuar });
   } catch (err) {
     await db.query("UPDATE catalogos SET ia_status = 'falhou', ia_info = $1, atualizado_em = NOW() WHERE id = $2", [mensagemErroIA(err), c.id]).catch(function () {});
     err.mensagem = mensagemErroIA(err);
     throw err;
   }
   return db.transaction(async function (client) {
-    if (parte === 0) await client.query('DELETE FROM produtos WHERE catalogo_id = $1', [c.id]);
+    if (parte === 0 && !continuar) await client.query('DELETE FROM produtos WHERE catalogo_id = $1', [c.id]);
     const n0 = (await client.query('SELECT count(*)::int AS n FROM produtos WHERE catalogo_id = $1', [c.id])).rows[0].n;
     const ids = { usuarioId: c.usuario_id, fornecedorId: c.fornecedor_id, catalogoId: c.id };
     await db.inserirEmLote(client, 'produtos', COLUNAS_PRODUTO, r.produtos.map(function (p, i) { return linhaProduto(p, n0 + i, ids, 'ia'); }));
     const totalProdutos = n0 + r.produtos.length;
-    const fim = parte + 1 >= total;
+    const fim = parte + 1 >= total && !r.incompleto;
     await client.query('UPDATE catalogos SET total_produtos = $1, formato = $2, ia_status = $3, ia_info = $4, atualizado_em = NOW() WHERE id = $5', [
       totalProdutos, totalProdutos ? 'ia' : c.formato,
       fim ? (totalProdutos ? 'concluido' : 'sem_produtos') : 'estruturando',
@@ -184,7 +186,7 @@ async function estruturarParte(opcoes) {
       c.id]);
     const atualizados = await completarFornecedor(client, c.fornecedor_id, r.fornecedor);
     return { parte: parte, total: total, fim: fim, produtos_novos: r.produtos.length, total_produtos: totalProdutos,
-      fornecedor_atualizado: atualizados, modelo: r.modelo, resumo: r.resumo || '' };
+      fornecedor_atualizado: atualizados, modelo: r.modelo, resumo: r.resumo || '', incompleto: !!r.incompleto, ultimo: r.ultimo || '' };
   });
 }
 

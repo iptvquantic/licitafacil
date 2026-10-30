@@ -5,8 +5,10 @@
 var Importador = (function () {
   'use strict';
 
-  var TENTATIVAS_PAGINA = 3;
-  var MAX_CONTINUACOES = 4; // página muito cheia: até 4 pedidos extras para ler o resto
+  var TENTATIVAS_PAGINA = 2;   // cada tentativa pode levar alguns minutos (a IA lê em streaming até ~4,5 min)
+  var MAX_CONTINUACOES = 6;    // página muito cheia: até 6 pedidos extras para ler o resto
+  var TEMPO_IA = 295000;       // o servidor responde em até ~4,5 min (o que leu até ali, se a página for enorme)
+  var PARALELO_IA = 3;         // páginas lidas ao mesmo tempo pela IA
   var BLOCO_TEXTO_IA = 6000;
   var FORMATOS_PRONTOS = ['prompt_mestre', 'json', 'tabela'];
   var CAMPOS_TECNICOS = ['codigo', 'marca', 'categoria', 'descricao', 'bitola', 'tensao', 'material', 'isolamento', 'cobertura',
@@ -132,7 +134,7 @@ var Importador = (function () {
           return apiPost('/api/extracao/pagina', {
             imagem: imagem, texto: texto.slice(0, 15000), pagina: k, total: doc.paginas, contexto: estado.contexto,
             nome_arquivo: opcoes.nomeArquivo || doc.nome, evitar: evitar, continuar_apos: continuarApos || ''
-          }, { timeout: 75000 }).then(respostaIA);
+          }, { timeout: TEMPO_IA }).then(respostaIA);
         }).catch(function (err) {
           if (err && err.code === 'CANCELADO') throw err;
           if (err && err.code === 'COTA') { estado.cotaAcabou = true; throw err; }
@@ -301,15 +303,16 @@ var Importador = (function () {
       if (atual.paginas.length) blocos.push(atual);
       var i = 0;
       // a IA gratuita às vezes responde vazio ou está ocupada: tenta de novo com outro modelo
-      function pedirBloco(b, tentativa, evitar) {
-        return apiPost('/api/extracao/estruturar-bloco', { texto: b.texto.slice(0, 16000), contexto: estado.contexto, evitar: evitar }, { timeout: 75000 })
+      function pedirBloco(b, tentativa, evitar, continuarApos) {
+        return apiPost('/api/extracao/estruturar-bloco', { texto: b.texto.slice(0, 16000), contexto: estado.contexto, evitar: evitar,
+          continuar_apos: continuarApos || '' }, { timeout: TEMPO_IA })
           .then(respostaIA)
           .catch(function (err) {
             if (err && err.code === 'COTA') { estado.cotaAcabou = true; throw err; }
             var semVolta = err && (err.code === 'SEM_CHAVE' || err.code === 'CHAVE' || err.status === 400 || err.status === 401 || err.status === 402 || err.status === 403);
             if (tentativa < 2 && !semVolta && !estado.cancelado) {
               var outros = evitar.concat(err && Array.isArray(err.tentados) ? err.tentados : []);
-              return esperar(1500).then(function () { return pedirBloco(b, tentativa + 1, outros); });
+              return esperar(1500).then(function () { return pedirBloco(b, tentativa + 1, outros, continuarApos); });
             }
             throw err;
           });
@@ -319,9 +322,24 @@ var Importador = (function () {
         if (i >= blocos.length || estado.cotaAcabou) return Promise.resolve();
         var b = blocos[i++];
         emitir({ tipo: 'texto_ia', bloco: i, total: blocos.length, paginas: b.paginas });
-        return pedirBloco(b, 1, []).then(function (r) {
+        // trecho com produtos demais: a IA continua de onde a resposta foi cortada
+        var todos = [];
+        var voltas = 0;
+        function lerBloco(continuarApos) {
+          return pedirBloco(b, 1, [], continuarApos).then(function (r) {
+            var novos = r.produtos || [];
+            todos = todos.concat(novos);
+            voltas++;
+            if (r.incompleto && r.ultimo && novos.length && voltas <= MAX_CONTINUACOES && !estado.cancelado && !estado.cotaAcabou) {
+              emitir({ tipo: 'continua', pagina: b.paginas[0], produtos: todos.length });
+              return lerBloco(r.ultimo).then(function () { return r; }, function () { return r; });
+            }
+            return r;
+          });
+        }
+        return lerBloco('').then(function (r) {
           if (r.resumo) estado.contexto = r.resumo;
-          registrar(b.paginas[0], { metodo: 'ia_texto', produtos: r.produtos || [], fornecedor: r.fornecedor || null, resumo: r.resumo || '', modelo: r.modelo || '', erroIA: '' });
+          registrar(b.paginas[0], { metodo: 'ia_texto', produtos: todos, fornecedor: r.fornecedor || null, resumo: r.resumo || '', modelo: r.modelo || '', erroIA: '' });
           b.paginas.slice(1).forEach(function (k) { registrar(k, { metodo: 'ia_texto', erroIA: '' }); });
         }, function (err) {
           var msg = (err && err.error) || 'A IA não organizou o texto desta página.';
@@ -361,7 +379,7 @@ var Importador = (function () {
         return tentarOrganizado().then(function (pronto) {
           if (pronto) return resultado();
           var fila = numeros.slice();
-          var paralelo = estado.visao ? 2 : 1;
+          var paralelo = estado.visao ? PARALELO_IA : 1;
           var trabalhos = [];
           for (var i = 0; i < Math.min(paralelo, fila.length); i++) trabalhos.push(trabalhador(fila));
           return Promise.all(trabalhos)

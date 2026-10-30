@@ -52,6 +52,15 @@ const IMG = 'data:image/jpeg;base64,' + Buffer.from('ffd8ffe000104a4649460001010
   r = await api('POST', '/api/extracao/pagina', { imagem: IMG, pagina: 1, total: 1, nome_arquivo: 'catalogo-denso.pdf', continuar_apos: 'Cabo Multiplexado Triplex 3x16 mm²' }, A);
   check(r.s === 200 && r.j.incompleto === false && r.j.produtos.some(function (p) { return p.nome === 'Cabo Multiplexado Quadruplex 4x16 mm²'; }),
     'continuação traz o resto da página', r.j && r.j.produtos && r.j.produtos.map(function (p) { return p.nome; }));
+  // a IA trava no meio da resposta (streaming): o servidor devolve as linhas completas que chegaram e o navegador pede o resto
+  r = await api('POST', '/api/extracao/pagina', { imagem: IMG, pagina: 1, total: 1, nome_arquivo: 'tabela-lenta.pdf' }, A);
+  check(r.s === 200 && r.j.ok === true && r.j.incompleto === true && r.j.produtos.length === 4 && r.j.ultimo === 'Cabo de Controle Blindado 500V 5x0,5 mm²',
+    'IA travou: 4 linhas completas da tabela e aviso de incompleta', r.j && { incompleto: r.j.incompleto, n: r.j.produtos && r.j.produtos.length, ultimo: r.j.ultimo, error: r.j.error });
+  check(r.j.produtos && r.j.produtos[0] && r.j.produtos[0].bitola === '2x0,5 mm²' && r.j.produtos[0].tensao === '300/500 V' && r.j.produtos[0].atributos['Peso (kg/km)'] === '45',
+    'linha da tabela vira produto com medida, dados comuns e colunas', r.j.produtos && r.j.produtos[0]);
+  r = await api('POST', '/api/extracao/pagina', { imagem: IMG, pagina: 1, total: 1, nome_arquivo: 'tabela-lenta.pdf', continuar_apos: 'Cabo de Controle Blindado 500V 5x0,5 mm²' }, A);
+  check(r.s === 200 && r.j.incompleto === false && r.j.produtos.map(function (p) { return p.bitola; }).join(',') === '6x0,5 mm²,8x0,5 mm²',
+    'continuação traz as linhas que faltavam', r.j && r.j.produtos && r.j.produtos.map(function (p) { return p.nome; }));
   // a IA de imagem falha (o mock devolve 502 para "eletrica-sul"): resposta 200 com ok:false, sem erro de rede no navegador
   r = await api('POST', '/api/extracao/pagina', { imagem: IMG, pagina: 1, total: 1, nome_arquivo: 'catalogo-bruto-eletrica-sul.pdf' }, A);
   check(r.s === 200 && r.j.ok === false && r.j.code && Array.isArray(r.j.tentados) && r.j.tentados.length >= 1 && /IA/.test(r.j.error),
