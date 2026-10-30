@@ -21,16 +21,21 @@ var ESTADO = {
   pollTimer: null,
   iaEsperada: null,
   confirmar: null,
-  avisoPlanoMostrado: false
+  avisoPlanoMostrado: false,
+  importacao: null,
+  capacidades: null,
+  capacidadesEm: 0,
+  organizando: null
 };
 
-var TITULOS = { busca: 'Buscar produtos', fornecedores: 'Fornecedores', detalhe: 'Fornecedor', config: 'Configurações', admin: 'Painel do dono' };
+var TITULOS = { busca: 'Buscar produtos', importar: 'Importar catálogo', fornecedores: 'Fornecedores', detalhe: 'Fornecedor', config: 'Configurações', admin: 'Painel do dono' };
 var NOMES_PLANO = { trial: 'Teste grátis', mensal: 'Mensal', trimestral: 'Trimestral', anual: 'Anual' };
 var ORIGENS = {
   texto_colado: 'Texto colado', pdf_navegador: 'PDF lido no navegador', ocr_navegador: 'PDF escaneado (OCR)',
-  imagem_ocr: 'Foto (OCR)', pdf_servidor: 'PDF lido no servidor', reprocessado: 'Relido', ia: 'Organizado pela IA'
+  imagem_ocr: 'Foto (OCR)', pdf_servidor: 'PDF lido no servidor', reprocessado: 'Relido', ia: 'Organizado pela IA',
+  ia_visao: 'Lido pela IA (imagem das páginas)', ia_texto: 'Texto organizado pela IA'
 };
-var FORMATOS = { prompt_mestre: 'Prompt Mestre', json: 'JSON', tabela: 'Tabela', texto: 'Texto livre' };
+var FORMATOS = { prompt_mestre: 'Prompt Mestre', json: 'JSON', tabela: 'Tabela', texto: 'Texto livre', ia: 'Organizado pela IA' };
 var IA_ATIVA = ['na_fila', 'estruturando'];
 var MAX_ARQUIVO_MB = 50;
 var MAX_TEXTO = 1500000; // a função da Vercel aceita até 4,5 MB por envio
@@ -115,13 +120,40 @@ var PROMPT_MESTRE = [
 // ─── Utilidades de tela ─────────────────────────────────────────────
 function $(id) { return document.getElementById(id); }
 function mostrar(el, sim) { el = typeof el === 'string' ? $(el) : el; if (el) el.classList.toggle('hidden', !sim); }
-function html(id, conteudo) { var el = $(id); if (el) el.innerHTML = conteudo; }
+function html(id, conteudo) {
+  var el = $(id);
+  if (!el) return;
+  var atualizacao = el.childElementCount > 0;
+  el.innerHTML = conteudo;
+  // Atualizações (filtro, acompanhamento) não repetem a animação de entrada: a tela não pisca
+  if (atualizacao) Array.prototype.forEach.call(el.querySelectorAll('.fade-in'), function (n) { n.classList.remove('fade-in'); });
+}
 function valor(id) { var el = $(id); return el ? String(el.value || '') : ''; }
 function plural(n, um, varios) { return n === 1 ? um : varios; }
 function numero(n) { return (Number(n) || 0).toLocaleString('pt-BR'); }
 function vazio() { return '<span class="text-muted" title="não informado">—</span>'; }
 function inicial(nome) { var s = String(nome || '').trim(); return s ? s.charAt(0).toUpperCase() : '?'; }
 function ehMobile() { return window.matchMedia && window.matchMedia('(max-width: 768px)').matches; }
+
+// CNPJ: 14 números com os 2 dígitos verificadores certos (mesma conta do servidor)
+function cnpjValido(c) {
+  c = String(c || '').replace(/\D/g, '');
+  if (c.length !== 14 || /^(\d)\1{13}$/.test(c)) return false;
+  function dv(base) {
+    var pesos = base.length === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    var soma = 0;
+    for (var i = 0; i < pesos.length; i++) soma += parseInt(base.charAt(i), 10) * pesos[i];
+    var r = soma % 11;
+    return r < 2 ? 0 : 11 - r;
+  }
+  var d1 = dv(c.slice(0, 12));
+  var d2 = dv(c.slice(0, 12) + d1);
+  return c.charAt(12) === String(d1) && c.charAt(13) === String(d2);
+}
+function msgCNPJ(c) {
+  var n = String(c || '').replace(/\D/g, '').length;
+  return n !== 14 ? 'Confira o CNPJ: são 14 números.' : 'Confira o CNPJ: os dígitos verificadores não batem.';
+}
 
 function semAcento(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, ''); }
 function normalizar(s) {
@@ -193,6 +225,18 @@ function htmlContatos(f, opcoes) {
       '<span' + (opcoes.compacto ? ' class="sr-only"' : '') + '>' + (opcoes.compacto ? 'E-mail' : esc(f.email)) + '</span></a>');
   }
   return partes.length ? '<div class="contatos">' + partes.join('') + '</div>' : '<span class="text-sm text-muted">Sem contato cadastrado</span>';
+}
+
+// CNPJ, site e endereço do fornecedor (quando houver)
+function htmlDadosEmpresa(f) {
+  var partes = [];
+  if (f.cnpj) partes.push('<span><b>CNPJ</b> ' + esc(f.cnpj) + '</span>');
+  if (f.site) {
+    var url = /^https?:\/\//i.test(f.site) ? f.site : 'https://' + f.site;
+    partes.push('<span><b>Site</b> <a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(String(f.site).replace(/^https?:\/\//i, '')) + '</a></span>');
+  }
+  if (f.endereco) partes.push('<span><b>Endereço</b> ' + esc(f.endereco) + '</span>');
+  return partes.length ? '<div class="forn-dados">' + partes.join('') + '</div>' : '';
 }
 
 function spec(rotulo, val, re, forte) {
@@ -293,6 +337,7 @@ function mostrarSecao(nome) {
   $('topbar-title').textContent = TITULOS[nome] || 'LicitaFácil';
   document.title = (TITULOS[nome] || 'LicitaFácil') + ' — LicitaFácil';
   if (nome !== 'detalhe') pararAcompanhamento();
+  if (ESTADO.importacao && ESTADO.importacao.fase === 'concluido') descartarImportacao(true);
   fecharMenuMobile();
   window.scrollTo(0, 0);
 }
@@ -305,10 +350,11 @@ function rotear() {
     abrirFornecedor(parseInt(partes[1], 10), partes[2] || null);
     return;
   }
-  if (['busca', 'fornecedores', 'config', 'admin'].indexOf(secao) < 0) secao = 'busca';
+  if (['busca', 'importar', 'fornecedores', 'config', 'admin'].indexOf(secao) < 0) secao = 'busca';
   if (secao === 'admin' && !ESTADO.usuario.admin) secao = 'busca';
   mostrarSecao(secao);
   if (secao === 'busca') entrarBusca();
+  else if (secao === 'importar') mostrarImportacao('importar');
   else if (secao === 'fornecedores') carregarFornecedores();
   else if (secao === 'config') renderConfig();
   else if (secao === 'admin') carregarAdmin();
@@ -393,10 +439,9 @@ function renderOnboarding() {
       (botao ? '<div class="mt-3">' + botao + '</div>' : '') + '</div>';
   }
   html('onboarding', '<div class="card mb-4 fade-in"><div class="card-header"><h2 class="card-title">Comece em 3 passos</h2></div><div class="onboarding">' +
-    etapa(1, temForn, 'Cadastre um fornecedor', 'Nome e contato de quem vende para você (WhatsApp, telefone ou e-mail).',
-      temForn ? '' : '<button type="button" class="btn btn-primary btn-sm" data-acao="novo-fornecedor">' + ICONES.mais + 'Cadastrar fornecedor</button>') +
-    etapa(2, false, 'Adicione o catálogo', 'Envie o PDF (com texto ou escaneado) ou cole a resposta do Prompt Mestre.',
-      temForn ? '<button type="button" class="btn btn-primary btn-sm" data-acao="ir" data-secao="fornecedores">' + ICONES.enviar + 'Escolher fornecedor</button>' : '') +
+    etapa(1, false, 'Importe um catálogo', 'Envie o PDF ou as fotos. A IA lê cada página, cadastra o fornecedor e organiza os produtos.',
+      '<button type="button" class="btn btn-primary btn-sm" data-acao="ir" data-secao="importar">' + ICONES.enviar + 'Importar catálogo</button>') +
+    etapa(2, false, 'Confira e salve', 'Veja os produtos e os dados do fornecedor encontrados antes de gravar. Nada é salvo sem você aprovar.', '') +
     etapa(3, false, 'Busque por especificação', 'Medida, norma ou código: “cabo PP 3x2,5mm”, “NBR 6148”, “PP-325”.', '') +
     '</div></div>');
 }
@@ -476,16 +521,39 @@ function cardResultadoProduto(p, re) {
       htmlContatos(p.fornecedor, { produto: p.nome + (p.codigo ? ' (cód. ' + p.codigo + ')' : '') }) + '</div>' +
     '</div>';
 }
+// Fornecedores cujo nome ou especialidade combinam com a busca (mesmo sem catálogo)
+function htmlRelacionados(lista, re, titulo) {
+  if (!lista.length) return '';
+  return '<div class="secao-titulo"><h3>' + esc(titulo) + '</h3><span class="contagem">' + lista.length + ' ' + plural(lista.length, 'fornecedor', 'fornecedores') + '</span></div>' +
+    '<div class="forn-grid mb-4">' + lista.map(function (f) {
+      var semCat = !f.total_catalogos;
+      return '<div class="forn-card"><div class="topo"><div class="nome">' + marcar(f.nome, re) + '</div>' +
+        (semCat ? '<span class="badge badge-yellow">sem catálogo</span>' : '<span class="badge badge-blue">' + numero(f.total_catalogos) + ' ' + plural(f.total_catalogos, 'catálogo', 'catálogos') + '</span>') + '</div>' +
+        (f.observacoes ? '<div class="trecho">' + marcar(f.observacoes, re) + '</div>' : '') +
+        htmlContatos(f, { compacto: false }) +
+        '<div class="flex gap-2" style="flex-wrap:wrap"><button type="button" class="btn btn-ghost btn-sm" data-acao="ver-fornecedor" data-id="' + esc(f.id) + '">' + ICONES.olho + 'Ver fornecedor</button>' +
+        (semCat ? '<button type="button" class="btn btn-secondary btn-sm" data-acao="adicionar-catalogo" data-id="' + esc(f.id) + '">' + ICONES.enviar + 'Adicionar catálogo</button>' : '') + '</div></div>';
+    }).join('') + '</div>';
+}
 function renderResultados(r, q) {
   var re = criarDestaque(q);
   var produtos = r.produtos || [];
   var trechos = (r.fornecedores || []).filter(function (f) { return f.trecho && !f.produtos_encontrados; });
+  var jaMostrados = {};
+  (r.fornecedores || []).forEach(function (f) { jaMostrados[f.fornecedor_id] = 1; });
+  var relacionados = (r.fornecedores_relacionados || []).filter(function (f) { return !jaMostrados[f.id]; });
   if (!produtos.length && !trechos.length) {
+    if (relacionados.length) {
+      html('resultados', '<div class="fade-in"><div class="banner info mb-4"><span>Nenhum catálogo cadastrado cita “' + esc(q) +
+        '”, mas estes fornecedores trabalham com isso. Adicione o catálogo deles para ver produtos, medidas e preços.</span></div>' +
+        htmlRelacionados(relacionados, re, 'Fornecedores que trabalham com isso') + '</div>');
+      return;
+    }
     var semCatalogo = ESTADO.stats && ESTADO.stats.total_catalogos === 0;
     html('resultados', caixaVazia(ICONES.busca, semCatalogo ? 'Ainda não há catálogos para buscar' : 'Nada encontrado para “' + q + '”',
-      semCatalogo ? 'Adicione o catálogo de um fornecedor e a busca passa a encontrar os produtos dele.'
-        : 'Tente só a medida (ex.: <strong>2,5mm</strong>), só a norma ou só o código. Confira também se o catálogo do fornecedor já foi adicionado.',
-      '<button type="button" class="btn btn-secondary" data-acao="ir" data-secao="fornecedores">' + ICONES.enviar + 'Adicionar catálogo</button>'));
+      semCatalogo ? 'Importe o catálogo de um fornecedor e a busca passa a encontrar os produtos dele.'
+        : 'Tente só a medida (ex.: <strong>2,5mm</strong>), só a norma ou só o código. Confira também se o catálogo do fornecedor já foi importado.',
+      '<button type="button" class="btn btn-primary" data-acao="ir" data-secao="importar">' + ICONES.enviar + 'Importar catálogo</button>'));
     return;
   }
   var partes = [];
@@ -509,6 +577,7 @@ function renderResultados(r, q) {
         '<div><button type="button" class="btn btn-ghost btn-sm" data-acao="ver-fornecedor" data-id="' + esc(f.fornecedor_id) + '">' + ICONES.olho + 'Ver fornecedor</button></div></div>';
     }).join('') + '</div>');
   }
+  if (relacionados.length) partes.push(htmlRelacionados(relacionados, re, 'Outros fornecedores que trabalham com isso'));
   html('resultados', '<div class="fade-in">' + partes.join('') + '</div>');
 }
 
@@ -557,14 +626,15 @@ function renderFornecedores() {
   var filtro = normalizar(valor('filtro-fornecedores'));
   var lista = ESTADO.fornecedores.filter(function (f) {
     if (!filtro) return true;
-    return normalizar([f.nome, f.email, f.telefone, f.whatsapp, f.observacoes].join(' ')).indexOf(filtro) >= 0;
+    return normalizar([f.nome, f.email, f.telefone, f.whatsapp, f.observacoes, f.cnpj, f.site].join(' ')).indexOf(filtro) >= 0;
   });
   var total = ESTADO.fornecedores.length;
   $('contagem-fornecedores').textContent = total ? (filtro ? lista.length + ' de ' + total : total + ' ' + plural(total, 'fornecedor', 'fornecedores')) : '';
   if (!total) {
     html('lista-fornecedores', caixaVazia(ICONES.predio, 'Nenhum fornecedor ainda',
-      'Cadastre o primeiro fornecedor e depois adicione o catálogo dele. Em minutos os produtos aparecem na busca.',
-      '<button type="button" class="btn btn-primary" data-acao="novo-fornecedor">' + ICONES.mais + 'Cadastrar fornecedor</button>'));
+      'Comece pelo catálogo: a IA lê o PDF, cadastra o fornecedor e organiza os produtos. Você confere antes de salvar.',
+      '<button type="button" class="btn btn-primary" data-acao="ir" data-secao="importar">' + ICONES.enviar + 'Importar catálogo</button>' +
+      '<button type="button" class="btn btn-secondary" data-acao="novo-fornecedor">' + ICONES.mais + 'Cadastrar sem catálogo</button>'));
     return;
   }
   if (!lista.length) {
@@ -618,6 +688,9 @@ function abrirModalFornecedor(id) {
   $('forn-telefone').value = f ? (f.telefone || '') : '';
   $('forn-whatsapp').value = f ? (f.whatsapp || '') : '';
   $('forn-email').value = f ? (f.email || '') : '';
+  $('forn-cnpj').value = f ? (f.cnpj || '') : '';
+  $('forn-site').value = f ? (f.site || '') : '';
+  $('forn-endereco').value = f ? (f.endereco || '') : '';
   $('forn-obs').value = f ? (f.observacoes || '') : '';
   mostrar('forn-erro', false);
   openModal('modal-fornecedor');
@@ -627,7 +700,8 @@ function salvarFornecedor(e) {
   var id = valor('forn-id');
   var dados = {
     nome: valor('forn-nome').trim(), telefone: valor('forn-telefone').trim(), whatsapp: valor('forn-whatsapp').trim(),
-    email: valor('forn-email').trim(), observacoes: valor('forn-obs').trim()
+    email: valor('forn-email').trim(), observacoes: valor('forn-obs').trim(),
+    cnpj: valor('forn-cnpj').trim(), site: valor('forn-site').trim(), endereco: valor('forn-endereco').trim()
   };
   var erroEl = $('forn-erro');
   function falhar(msg, campo) {
@@ -638,6 +712,7 @@ function salvarFornecedor(e) {
   if (!dados.nome) return falhar('Informe o nome do fornecedor.', 'forn-nome');
   if (dados.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(dados.email)) return falhar('Confira o e-mail: ele parece incompleto.', 'forn-email');
   if (dados.whatsapp && dados.whatsapp.replace(/\D/g, '').length < 10) return falhar('Informe o WhatsApp com DDD. Ex.: (11) 99999-9999', 'forn-whatsapp');
+  if (dados.cnpj && !cnpjValido(dados.cnpj)) return falhar(msgCNPJ(dados.cnpj), 'forn-cnpj');
   mostrar(erroEl, false);
   var btn = $('btn-salvar-fornecedor');
   setLoading(btn, true, 'Salvando…');
@@ -688,7 +763,6 @@ function abrirFornecedor(id, aba) {
     html('tbody-produtos', '');
     html('cards-produtos', '');
     html('lista-catalogos', '');
-    html('resultado-arquivo', '');
     html('resultado-colar', '');
     $('filtro-produtos').value = '';
     mostrar('produtos-conteudo', false);
@@ -730,7 +804,7 @@ function renderCabecalhoFornecedor() {
   }
   html('det-header', '<div class="forn-header fade-in"><div class="forn-avatar" aria-hidden="true">' + esc(inicial(f.nome)) + '</div>' +
     '<div><h2 class="forn-nome-big" id="det-nome">' + esc(f.nome) + '</h2>' +
-    '<p class="forn-espec">' + (f.observacoes ? esc(f.observacoes) : 'Sem especialidade cadastrada.') + '</p>' + htmlContatos(f) + '</div>' +
+    '<p class="forn-espec">' + (f.observacoes ? esc(f.observacoes) : 'Sem especialidade cadastrada.') + '</p>' + htmlDadosEmpresa(f) + htmlContatos(f) + '</div>' +
     '<button type="button" class="btn btn-secondary" data-acao="editar-fornecedor" data-id="' + esc(f.id) + '">' + ICONES.editar + 'Editar</button></div>');
   $('badge-produtos').textContent = numero(f.total_produtos || 0);
   $('badge-catalogos').textContent = numero((f.catalogos || []).length);
@@ -746,6 +820,8 @@ function mudarAba(aba, semFoco) {
     mostrar('painel-' + a, ativo);
   });
   if (!semFoco) $('aba-' + aba).focus();
+  if (aba === 'adicionar') mostrarImportacao('fornecedor');
+  else if (ESTADO.importacao && ESTADO.importacao.fase === 'concluido' && ESTADO.importacao.ctx.tela === 'fornecedor') descartarImportacao(true);
   if (ESTADO.fornecedor) {
     var alvo = '#fornecedor/' + ESTADO.fornecedor.id + (aba === 'produtos' ? '' : '/' + aba);
     if (window.location.hash !== alvo && window.history && window.history.replaceState) window.history.replaceState(null, '', alvo);
@@ -912,8 +988,10 @@ function renderCatalogos() {
     meta.push(numero(c.total_produtos || c.produtos_gravados || 0) + ' ' + plural(c.total_produtos || c.produtos_gravados || 0, 'produto', 'produtos'));
     meta.push(numero(c.total_chunks || 0) + ' ' + plural(c.total_chunks || 0, 'trecho', 'trechos') + ' na busca');
     var iaAtiva = IA_ATIVA.indexOf(c.ia_status) >= 0;
-    var ia = c.ia_info ? '<div class="cat-ia">' + (iaAtiva ? '<span class="spinner" aria-hidden="true"></span>' : (c.ia_status === 'concluido' ? ICONES.ok : ICONES.info)) + '<span>' + esc(c.ia_info) + '</span></div>' : '';
-    var podeOrganizar = c.status === 'processado' && !(c.total_produtos || c.produtos_gravados) && !iaAtiva;
+    var org = ESTADO.organizando && String(ESTADO.organizando.cid) === String(c.id) ? ESTADO.organizando : null;
+    var ia = org ? htmlProgressoOrganizar(org)
+      : (c.ia_info ? '<div class="cat-ia">' + (iaAtiva ? '<span class="spinner" aria-hidden="true"></span>' : (c.ia_status === 'concluido' ? ICONES.ok : ICONES.info)) + '<span>' + esc(c.ia_info) + '</span></div>' : '');
+    var podeOrganizar = c.status === 'processado' && !(c.total_produtos || c.produtos_gravados) && !org && !(iaAtiva && ESTADO.organizando);
     return '<div class="cat-item">' +
       '<div class="cat-ico" aria-hidden="true">' + ICONES.arquivo + '</div>' +
       '<div class="cat-info"><div class="cat-nome" title="' + esc(c.nome_arquivo) + '">' + esc(c.nome_arquivo || 'Catálogo') + '</div>' +
@@ -930,7 +1008,7 @@ function renderCatalogos() {
 function acompanharCatalogos() {
   pararAcompanhamento();
   var f = ESTADO.fornecedor;
-  if (!f || ESTADO.secao !== 'detalhe') return;
+  if (!f || ESTADO.secao !== 'detalhe' || ESTADO.organizando) return;
   var ativo = (f.catalogos || []).some(function (c) { return IA_ATIVA.indexOf(c.ia_status) >= 0 || c.status === 'processando'; });
   var esp = ESTADO.iaEsperada;
   if (esp) {
@@ -960,16 +1038,63 @@ function reprocessarCatalogo(cid, botao) {
     showToast(msgErro(err, 'Não foi possível reler o catálogo.'), 'error');
   });
 }
-function estruturarCatalogo(cid, botao) {
+// "Organizar com IA": o navegador conduz a IA parte por parte do texto salvo (cada parte cabe numa chamada)
+function htmlProgressoOrganizar(org) {
+  var pct = org.total ? Math.round((org.parte / org.total) * 100) : 0;
+  return '<div class="org-prog" id="org-prog-' + esc(org.cid) + '">' +
+    '<div class="linha"><span>' + (org.total ? 'A IA está organizando: parte ' + Math.min(org.parte + 1, org.total) + ' de ' + org.total : 'Preparando…') +
+    ' · ' + numero(org.produtos) + ' ' + plural(org.produtos, 'produto', 'produtos') + '</span><span>' + pct + '%</span></div>' +
+    '<div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '" aria-label="Progresso da IA"><div style="width:' + pct + '%"></div></div>' +
+    '<button type="button" class="btn btn-ghost btn-sm mt-2" data-acao="organizar-parar">Parar</button></div>';
+}
+function atualizarProgressoOrganizar() {
+  var org = ESTADO.organizando;
+  if (!org) return;
+  var el = $('org-prog-' + org.cid);
+  if (el) el.outerHTML = htmlProgressoOrganizar(org);
+}
+function organizarComIA(cid) {
   var f = ESTADO.fornecedor;
   if (!f) return;
-  setLoading(botao, true, 'Enviando…');
-  apiPost('/api/fornecedores/' + f.id + '/catalogo/' + cid + '/estruturar', {}).then(function (r) {
-    showToast(r.msg || 'A IA começou a organizar os produtos.', 'success', 5000);
-    carregarDetalhe(f.id);
+  if (ESTADO.organizando) { showToast('A IA já está organizando um catálogo. Aguarde terminar.', 'warning'); return; }
+  var org = { cid: String(cid), fornecedorId: f.id, parte: 0, total: 0, produtos: 0, parar: false, falhasSeguidas: 0 };
+  ESTADO.organizando = org;
+  pararAcompanhamento();
+  renderCatalogos();
+  var base = '/api/fornecedores/' + f.id + '/catalogo/' + cid + '/estruturar';
+  var contexto = '';
+  function proxima() {
+    if (org.parar || org.parte >= org.total) return Promise.resolve();
+    return apiPost(base, { parte: org.parte, contexto: contexto }, { timeout: 80000 }).then(function (r) {
+      // a API responde ok:false quando a IA gratuita falha (cota, modelo ocupado)
+      if (r && r.ok === false) throw { error: r.error, code: r.code, status: r.code === 'COTA' ? 429 : 502 };
+      org.produtos = r.total_produtos;
+      org.parte = r.parte + 1;
+      org.falhasSeguidas = 0;
+      contexto = r.resumo || '';
+      atualizarProgressoOrganizar();
+      return proxima();
+    }, function (err) {
+      if (err && err.code !== 'COTA' && err.status !== 404 && err.status !== 400 && org.falhasSeguidas < 2) {
+        org.falhasSeguidas++;
+        return new Promise(function (ok) { setTimeout(ok, 2500); }).then(proxima);
+      }
+      throw err;
+    });
+  }
+  apiGet(base).then(function (r) {
+    org.total = r.total || 0;
+    atualizarProgressoOrganizar();
+    return proxima();
+  }).then(function () {
+    if (org.parar) showToast('Organização interrompida. ' + numero(org.produtos) + ' produtos foram salvos.', 'info', 5000);
+    else showToast(org.produtos ? numero(org.produtos) + ' produtos organizados pela IA!' : 'A IA não encontrou produtos neste texto.', org.produtos ? 'success' : 'warning', 6000);
   }).catch(function (err) {
-    setLoading(botao, false);
-    showToast(msgErro(err, 'A IA não está disponível agora. Use o Prompt Mestre.'), 'error', 6000);
+    showToast(msgErro(err, 'A IA não está disponível agora. Use o Prompt Mestre.'), 'error', 7000);
+  }).then(function () {
+    ESTADO.organizando = null;
+    if (ESTADO.fornecedor && ESTADO.fornecedor.id === org.fornecedorId) carregarDetalhe(org.fornecedorId);
+    carregarStats();
   });
 }
 function pedirExclusaoCatalogo(cid) {
@@ -997,25 +1122,17 @@ function mudarModoEntrada(modo) {
   mostrar('entrada-colar', ESTADO.modoEntrada === 'colar');
   if (ESTADO.modoEntrada === 'colar') setTimeout(function () { $('colar-texto').focus(); }, 30);
 }
-function atualizarProgresso(texto, pct) {
-  mostrar('progresso-leitura', true);
-  $('progresso-texto').textContent = texto;
-  var p = Math.max(0, Math.min(100, Math.round(pct || 0)));
-  $('progresso-pct').textContent = p + '%';
-  $('progresso-fill').style.width = p + '%';
-  $('progresso-barra').setAttribute('aria-valuenow', String(p));
-}
 function resumoIndexacao(r, extra) {
   var partes = [];
   if (r.produtos) {
     partes.push('<strong>' + ICONES.ok.replace('<svg ', '<svg width="16" height="16" style="display:inline;vertical-align:-3px;margin-right:6px" ') + 'Pronto! ' +
       numero(r.produtos) + ' ' + plural(r.produtos, 'produto organizado', 'produtos organizados') + '</strong> e ' + numero(r.trechos) + ' trechos na busca.');
   } else {
-    partes.push('<strong>Catálogo lido: ' + numero(r.trechos) + ' ' + plural(r.trechos, 'trecho', 'trechos') + ' já aparecem na busca.</strong>');
-    if (r.ia === 'na_fila') partes.push('O texto não estava no formato do Prompt Mestre, então <strong>a IA está organizando a tabela de produtos</strong>. Acompanhe na aba Catálogos.');
-    else partes.push('O texto não estava no formato do Prompt Mestre. Para ter a tabela de produtos, use “Colar a resposta da IA”.');
+    partes.push('<strong>Texto salvo: ' + numero(r.trechos) + ' ' + plural(r.trechos, 'trecho já aparece', 'trechos já aparecem') + ' na busca.</strong>');
+    if (r.ia === 'disponivel') partes.push('O texto não estava no formato do Prompt Mestre, então <strong>a IA está organizando a tabela de produtos</strong>. Acompanhe na aba Catálogos.');
+    else partes.push('O texto não estava no formato do Prompt Mestre. Para ter a tabela de produtos, cole a resposta do Prompt Mestre.');
   }
-  if (r.fornecedor_atualizado && r.fornecedor_atualizado.length) partes.push('Contato completado com o catálogo: ' + esc(r.fornecedor_atualizado.join(', ')) + '.');
+  if (r.fornecedor_atualizado && r.fornecedor_atualizado.length) partes.push('Dados do fornecedor completados: ' + esc(r.fornecedor_atualizado.join(', ')) + '.');
   if (extra) partes.push(esc(extra));
   return '<div class="resultado-ok fade-in" role="status"><p>' + partes.join('</p><p class="mt-2">') + '</p>' +
     '<div class="flex gap-2 mt-3" style="flex-wrap:wrap"><button type="button" class="btn btn-primary btn-sm" data-acao="aba" data-aba="' + (r.produtos ? 'produtos' : 'catalogos') + '">' +
@@ -1024,64 +1141,593 @@ function resumoIndexacao(r, extra) {
 function erroLeituraHTML(msg) {
   return '<div class="banner erro mt-4" role="alert"><span>' + esc(msg) + '</span></div>';
 }
-function processarArquivo(arquivo) {
-  var fid = ESTADO.fornecedorId;
-  if (!arquivo || !fid) return;
-  if (ESTADO.leitura) { showToast('Aguarde a leitura atual terminar ou cancele.', 'warning'); return; }
-  html('resultado-arquivo', '');
-  var tipo = LeitorCatalogo.tipoDoArquivo(arquivo);
-  if (!tipo) { html('resultado-arquivo', erroLeituraHTML('Formato não suportado. Envie PDF, JPG, PNG ou WEBP.')); return; }
-  if (arquivo.size > MAX_ARQUIVO_MB * 1024 * 1024) { html('resultado-arquivo', erroLeituraHTML('Arquivo maior que ' + MAX_ARQUIVO_MB + ' MB. Divida o PDF em partes e envie uma de cada vez.')); return; }
-  var controle = { cancelado: false };
-  ESTADO.leitura = controle;
-  var extra = '';
-  atualizarProgresso('Preparando a leitura de “' + arquivo.name + '”…', 1);
-  LeitorCatalogo.ler(arquivo, {
-    aoProgredir: function (texto, pct) { if (!controle.cancelado) atualizarProgresso(texto, pct); },
-    cancelado: function () { return controle.cancelado; }
-  }).then(function (lido) {
-    if (controle.cancelado) throw { code: 'CANCELADO' };
-    var texto = String(lido.texto || '');
-    if (texto.replace(/\s/g, '').length < 20) {
-      throw { error: tipo === 'pdf' ? 'Não encontrei texto legível neste PDF, nem com OCR. Confira se as páginas não estão em branco ou muito borradas.' : 'Não consegui ler texto nesta foto. Tire outra com mais luz, sem reflexo e com a página reta.' };
-    }
-    if (texto.length > MAX_TEXTO) { texto = texto.slice(0, MAX_TEXTO); extra = 'O catálogo é muito grande: indexei a primeira parte. Envie o restante separado.'; }
-    if (lido.paginas_ignoradas) extra = 'Li com OCR as primeiras páginas escaneadas; ' + lido.paginas_ignoradas + ' ficaram de fora. Envie o restante em outro arquivo.';
-    atualizarProgresso('Organizando os produtos e preparando a busca…', 97);
-    return apiPost('/api/extracao/texto/' + fid, { texto: texto, nome_arquivo: arquivo.name, origem: lido.origem, paginas: lido.paginas }, { timeout: 180000 });
+
+// ─── Importar catálogo: a IA lê página por página; a pessoa confere e salva ─────
+var IMP_LIMITE_TABELA = 150;
+var CAMPOS_FORN_IMP = [['nome', 'Nome do fornecedor *'], ['cnpj', 'CNPJ'], ['telefone', 'Telefone'], ['whatsapp', 'WhatsApp'],
+  ['email', 'E-mail'], ['site', 'Site'], ['endereco', 'Endereço'], ['especialidade', 'Especialidade']];
+var MAPA_FORN_EXISTENTE = { telefone: 'telefone', whatsapp: 'whatsapp', email: 'email', cnpj: 'cnpj', site: 'site', endereco: 'endereco', especialidade: 'observacoes' };
+
+// A leitura continua mesmo se a pessoa mudar de tela; só desenha quando a tela dela está aberta
+function importacaoVisivel(imp) {
+  if (!imp || ESTADO.importacao !== imp) return false;
+  if (imp.ctx.tela === 'importar') return ESTADO.secao === 'importar';
+  return ESTADO.secao === 'detalhe' && String(ESTADO.fornecedorId) === String(imp.fornecedorId) && ESTADO.aba === 'adicionar';
+}
+function contextoImportacao(tela) {
+  return tela === 'fornecedor'
+    ? { tela: 'fornecedor', entrada: 'imp-entrada-fornecedor', trabalho: 'imp-trabalho-fornecedor', capacidades: 'imp-capacidades-fornecedor' }
+    : { tela: 'importar', entrada: 'imp-entrada-importar', trabalho: 'imp-trabalho-importar', capacidades: 'imp-capacidades-importar' };
+}
+function carregarCapacidades(forcar) {
+  if (!forcar && ESTADO.capacidades && Date.now() - ESTADO.capacidadesEm < 60000) return Promise.resolve(ESTADO.capacidades);
+  return apiGet('/api/extracao/capacidades').then(function (c) {
+    ESTADO.capacidades = c;
+    ESTADO.capacidadesEm = Date.now();
+    return c;
+  }).catch(function () { return ESTADO.capacidades || { ia: false, visao: false, cota: null }; });
+}
+function restanteIA(c) { return c && c.cota && c.cota.restante != null ? Number(c.cota.restante) : null; }
+function htmlCapacidades(c) {
+  if (!c) return '';
+  var resta = restanteIA(c);
+  if (!c.ia) return '<div class="cap-linha alerta">' + ICONES.alerta + '<span>A IA não está configurada: a leitura usa OCR e os produtos não são organizados sozinhos.</span></div>';
+  if (resta === 0) return '<div class="cap-linha alerta">' + ICONES.alerta + '<span>A cota gratuita de IA de hoje acabou. Ela renova às 21h (Brasília). Dá para ler agora sem IA, mas a qualidade é bem menor.</span></div>';
+  return '<div class="cap-linha ok">' + ICONES.ia + '<span><strong>Leitura com IA ativa:</strong> ' +
+    (c.visao ? 'a IA lê a imagem de cada página (tabelas, PDFs escaneados e fotos).' : 'a IA organiza o texto das páginas.') +
+    (resta != null ? ' Restam <strong>' + numero(resta) + '</strong> leituras gratuitas hoje (1 por página).' : '') + '</span></div>';
+}
+function renderCapacidades(tela) {
+  var ctx = contextoImportacao(tela);
+  carregarCapacidades().then(function (c) { html(ctx.capacidades, htmlCapacidades(c)); });
+}
+
+// Mostra a importação certa na tela (ou o aviso de que há outra em andamento)
+function mostrarImportacao(tela) {
+  var ctx = contextoImportacao(tela);
+  var imp = ESTADO.importacao;
+  renderCapacidades(tela);
+  // leitura já salva: ao voltar para a tela, começa limpa (e não bloqueia a outra tela)
+  if (imp && imp.fase === 'concluido') { descartarImportacao(true); imp = null; }
+  if (!imp) { mostrar(ctx.entrada, true); html(ctx.trabalho, ''); return; }
+  var mesma = imp.ctx.tela === tela && (tela !== 'fornecedor' || imp.fornecedorId === ESTADO.fornecedorId);
+  if (!mesma) {
+    mostrar(ctx.entrada, false);
+    html(ctx.trabalho, '<div class="banner info"><span>Há uma leitura de catálogo em andamento (“' + esc(imp.nomeArquivo) +
+      '”). Termine ou descarte antes de começar outra.</span><div class="acoes"><button type="button" class="btn btn-primary btn-sm" data-acao="imp-ir">Ver a leitura</button></div></div>');
+    return;
+  }
+  mostrar(ctx.entrada, false);
+  if (imp.fase === 'abrindo') html(ctx.trabalho, carregando('Abrindo “' + imp.nomeArquivo + '”…'));
+  else if (imp.fase === 'preparar') renderPreparacao(imp);
+  else if (imp.fase === 'lendo') renderProgresso(imp);
+  else if (imp.fase === 'revisar') renderRevisao(imp);
+  else if (imp.fase === 'concluido') renderConcluido(imp);
+}
+
+function iniciarImportacao(arquivos, tela) {
+  var ctx = contextoImportacao(tela);
+  var atual = ESTADO.importacao;
+  if (atual && (atual.fase === 'lendo' || atual.fase === 'revisar')) {
+    showToast(atual.fase === 'lendo' ? 'Aguarde a leitura atual terminar ou cancele.' : 'Salve ou descarte a leitura atual antes de começar outra.', 'warning', 5000);
+    return;
+  }
+  descartarImportacao(true);
+  var lista = Array.prototype.slice.call(arquivos || []);
+  if (!lista.length) return;
+  var total = lista.reduce(function (s, a) { return s + (a.size || 0); }, 0);
+  if (total > MAX_ARQUIVO_MB * 1024 * 1024) {
+    html(ctx.trabalho, erroLeituraHTML('Arquivo maior que ' + MAX_ARQUIVO_MB + ' MB. Divida o PDF em partes e importe uma de cada vez.'));
+    return;
+  }
+  if (tela === 'fornecedor' && !ESTADO.fornecedorId) return;
+  var imp = {
+    ctx: ctx, fornecedorId: tela === 'fornecedor' ? ESTADO.fornecedorId : null, arquivos: lista, fase: 'abrindo',
+    fornecedor: tela === 'fornecedor' ? ESTADO.fornecedor : null,
+    nomeArquivo: lista.length === 1 ? lista[0].name : lista.length + ' fotos', excluidos: {}, filtro: '', limite: IMP_LIMITE_TABELA, modoForn: null
+  };
+  ESTADO.importacao = imp;
+  mostrar(ctx.entrada, false);
+  html(ctx.trabalho, carregando('Abrindo “' + imp.nomeArquivo + '”…'));
+  Promise.all([LeitorCatalogo.abrirDocumento(lista), carregarCapacidades(true)]).then(function (r) {
+    if (ESTADO.importacao !== imp) { r[0].fechar(); return; }
+    imp.doc = r[0];
+    imp.cap = r[1];
+    imp.fase = 'preparar';
+    renderPreparacao(imp);
   }).catch(function (err) {
-    // Leitor do navegador indisponível: lê o PDF no servidor (sem guardar o arquivo)
-    if (err && err.code === 'LEITOR_INDISPONIVEL' && tipo === 'pdf' && !controle.cancelado) {
-      atualizarProgresso('Enviando o PDF para leitura no servidor…', 50);
-      var fd = new FormData();
-      fd.append('arquivo', arquivo, arquivo.name);
-      return apiForm('/api/extracao/catalogo/' + fid, fd);
-    }
-    throw err;
-  }).then(function (r) {
-    ESTADO.leitura = null;
-    mostrar('progresso-leitura', false);
-    if (r.ia === 'na_fila') ESTADO.iaEsperada = { id: r.catalogo_id, fornecedor: fid, ate: Date.now() + 180000 };
-    if (ESTADO.fornecedorId !== fid) return;
-    html('resultado-arquivo', resumoIndexacao(r, extra));
-    showToast(r.produtos ? numero(r.produtos) + ' produtos organizados!' : 'Catálogo lido e pronto para a busca.', 'success');
-    carregarDetalhe(fid);
-    carregarStats();
-  }).catch(function (err) {
-    ESTADO.leitura = null;
-    mostrar('progresso-leitura', false);
-    if (err && err.code === 'CANCELADO') { showToast('Leitura cancelada.', 'info'); return; }
-    html('resultado-arquivo', erroLeituraHTML(msgErro(err, 'Não foi possível ler este arquivo.')));
+    if (ESTADO.importacao !== imp) return;
+    var visivel = importacaoVisivel(imp);
+    ESTADO.importacao = null;
+    var msg = msgErro(err, 'Não consegui abrir este arquivo.');
+    if (!visivel) { showToast(msg, 'error', 7000); return; }
+    mostrar(ctx.entrada, true);
+    html(ctx.trabalho, erroLeituraHTML(msg));
   });
 }
-function cancelarLeitura() {
-  if (!ESTADO.leitura) return;
-  ESTADO.leitura.cancelado = true;
-  LeitorCatalogo.cancelar();
-  ESTADO.leitura = null;
-  mostrar('progresso-leitura', false);
-  showToast('Leitura cancelada.', 'info');
+
+function renderPreparacao(imp) {
+  if (!importacaoVisivel(imp)) return;
+  var n = imp.doc.paginas;
+  var c = imp.cap || {};
+  var resta = restanteIA(c);
+  var iaPossivel = !!c.ia && resta !== 0;
+  var sugestaoFim = n;
+  var aviso = '';
+  if (iaPossivel && resta != null && n > resta) {
+    sugestaoFim = Math.max(1, resta);
+    aviso = '<div class="banner alerta mt-3"><span>Restam <strong>' + numero(resta) + '</strong> leituras com IA hoje e este catálogo tem <strong>' + numero(n) +
+      '</strong> páginas. Sugestão: leia agora as páginas 1 a ' + numero(resta) + ' e importe o restante amanhã, com o mesmo arquivo, a partir da página ' + numero(resta + 1) + '.</span></div>';
+  }
+  var tipo = imp.doc.tipo === 'pdf' ? 'PDF' : (n === 1 ? 'foto' : 'fotos');
+  html(imp.ctx.trabalho, '<div class="card imp-card fade-in">' +
+    '<div class="imp-arquivo"><div class="imp-arquivo-ico" aria-hidden="true">' + ICONES.arquivo + '</div>' +
+      '<div class="imp-arquivo-info"><strong>' + esc(imp.nomeArquivo) + '</strong><span>' + numero(n) + ' ' + plural(n, 'página', 'páginas') + ' · ' + tipo + '</span></div>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-acao="imp-descartar">Trocar arquivo</button></div>' +
+    htmlCapacidades(c) + aviso +
+    (n > 1 ? '<div class="form-row mt-4 imp-intervalo"><div class="form-group"><label class="form-label" for="imp-de">Da página</label>' +
+      '<input class="input" id="imp-de" type="number" inputmode="numeric" min="1" max="' + n + '" value="1"></div>' +
+      '<div class="form-group"><label class="form-label" for="imp-ate">Até a página</label>' +
+      '<input class="input" id="imp-ate" type="number" inputmode="numeric" min="1" max="' + n + '" value="' + sugestaoFim + '"></div></div>' : '') +
+    '<label class="check mt-3"><input type="checkbox" id="imp-usar-ia"' + (iaPossivel ? ' checked' : ' disabled') + '> <span>Ler com IA <span class="text-muted">(recomendado: muito mais preciso em tabelas e PDFs escaneados)</span></span></label>' +
+    '<div class="flex gap-2 mt-4" style="flex-wrap:wrap"><button type="button" class="btn btn-primary btn-lg" data-acao="imp-comecar">' + ICONES.ia + 'Começar leitura</button></div>' +
+    '</div>');
 }
+
+function comecarLeitura() {
+  var imp = ESTADO.importacao;
+  if (!imp || imp.fase !== 'preparar') return;
+  var n = imp.doc.paginas;
+  var de = Math.min(n, Math.max(1, parseInt(valor('imp-de'), 10) || 1));
+  var ate = Math.min(n, Math.max(de, parseInt(valor('imp-ate'), 10) || n));
+  var usarIA = $('imp-usar-ia') ? $('imp-usar-ia').checked : false;
+  imp.intervalo = { de: de, ate: ate };
+  imp.usarIA = usarIA;
+  imp.fase = 'lendo';
+  imp.sessao = Importador.criar({
+    documento: imp.doc, inicio: de, fim: ate, capacidades: imp.cap, usarIA: usarIA, nomeArquivo: imp.nomeArquivo,
+    aoEvento: function (ev) { aoEventoImportacao(imp, ev); }
+  });
+  renderProgresso(imp);
+  imp.sessao.iniciar().then(function (res) {
+    if (ESTADO.importacao !== imp) return null;
+    imp.resultado = res;
+    return prepararRevisao(imp);
+  }).then(function () {
+    if (ESTADO.importacao !== imp || !imp.resultado) return;
+    imp.fase = 'revisar';
+    if (importacaoVisivel(imp)) {
+      renderRevisao(imp);
+      showToast('Leitura concluída: confira os produtos e salve.', 'success', 5000);
+    } else {
+      showToast('Leitura de “' + imp.nomeArquivo + '” concluída. Volte em ' + (imp.ctx.tela === 'importar' ? 'Importar catálogo' : 'Adicionar catálogo do fornecedor') +
+        ' para conferir e salvar.', 'success', 9000);
+    }
+  }).catch(function (err) {
+    if (ESTADO.importacao !== imp) return;
+    if (err && err.code === 'CANCELADO') { descartarImportacao(true); showToast('Leitura cancelada.', 'info'); return; }
+    imp.fase = 'preparar';
+    var msg = msgErro(err, 'A leitura parou no meio. Tente de novo.');
+    if (!importacaoVisivel(imp)) { showToast(msg, 'error', 7000); return; }
+    renderPreparacao(imp);
+    html(imp.ctx.trabalho, $(imp.ctx.trabalho).innerHTML + erroLeituraHTML(msg));
+  });
+}
+
+var NOMES_METODO = { ia_visao: 'lida pela IA', ia_texto: 'texto organizado pela IA', pdf_texto: 'texto do PDF', ocr: 'OCR', estruturado: 'texto já organizado' };
+var NOMES_FORMATO_PRONTO = { prompt_mestre: 'no formato do Prompt Mestre', json: 'em JSON', tabela: 'em tabela' };
+function classeChip(p) {
+  if (!p) return 'pg-espera';
+  if (p.estado === 'lendo') return 'pg-lendo';
+  if (p.estado === 'erro') return 'pg-erro';
+  if (p.parcial) return 'pg-semia';
+  if (p.produtos && p.produtos.length) return 'pg-ok';
+  if (p.metodo === 'ia_texto') return 'pg-ok';
+  if (p.estado === 'sem_ia') return 'pg-semia';
+  return 'pg-vazia';
+}
+function tituloChip(p, n) {
+  if (!p) return 'Página ' + n + ': aguardando';
+  if (p.estado === 'lendo') return 'Página ' + n + ': lendo…';
+  if (p.estado === 'erro') return 'Página ' + n + ': erro — ' + (p.erro || '');
+  var q = (p.produtos || []).length;
+  return 'Página ' + n + ': ' + (q ? q + ' ' + plural(q, 'produto', 'produtos') : 'sem produtos') + (p.metodo ? ' (' + (NOMES_METODO[p.metodo] || p.metodo) + ')' : '') +
+    (p.parcial ? ' — pode ter ficado incompleta' : '') + (p.erroIA ? ' — ' + p.erroIA : '');
+}
+function htmlChips(imp) {
+  var est = imp.sessao ? imp.sessao.estado.paginas : {};
+  return imp.sessao.paginas.map(function (n) {
+    var p = est[n];
+    return '<span class="pg-chip ' + classeChip(p) + '" id="imp-pg-' + n + '" role="listitem" title="' + esc(tituloChip(p, n)) + '">' + n + '</span>';
+  }).join('');
+}
+function renderProgresso(imp) {
+  if (!importacaoVisivel(imp)) return;
+  var r = imp.sessao.resumo();
+  var pct = r.total ? Math.round((r.feitas / r.total) * 100) : 0;
+  html(imp.ctx.trabalho, '<div class="card imp-card">' +
+    '<div class="imp-topo"><div><h3 class="card-title">Lendo “' + esc(imp.nomeArquivo) + '”</h3>' +
+      '<p class="text-sm mt-1" id="imp-status" aria-live="polite">' + (imp.usarIA ? 'A IA está lendo as páginas…' : 'Lendo as páginas…') + '</p></div>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-acao="imp-cancelar">Cancelar</button></div>' +
+    '<div class="progresso mt-3"><div class="linha"><span id="imp-prog-texto">' + r.feitas + ' de ' + r.total + ' ' + plural(r.total, 'página', 'páginas') + '</span><span id="imp-prog-pct">' + pct + '%</span></div>' +
+      '<div class="barra" id="imp-prog-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '" aria-label="Progresso da leitura"><div id="imp-prog-fill" style="width:' + pct + '%"></div></div></div>' +
+    '<div class="imp-numeros"><div><strong id="imp-n-produtos">' + numero(r.produtos) + '</strong><span>produtos encontrados</span></div>' +
+      '<div><strong id="imp-n-ia">' + numero(r.comIA) + '</strong><span>páginas lidas pela IA</span></div></div>' +
+    '<div class="imp-paginas" role="list" aria-label="Situação de cada página">' + htmlChips(imp) + '</div>' +
+    '<div class="imp-legenda text-sm"><span><i class="pg-chip pg-ok"></i>com produtos</span><span><i class="pg-chip pg-vazia"></i>sem produtos</span>' +
+      '<span><i class="pg-chip pg-semia"></i>lida sem IA</span><span><i class="pg-chip pg-erro"></i>erro</span></div>' +
+    '<div class="imp-previa"><h4>Últimos produtos encontrados</h4><ul id="imp-previa-lista">' + htmlPrevia(imp) + '</ul></div>' +
+    '</div>');
+}
+function htmlPrevia(imp) {
+  var ult = imp.previa || [];
+  if (!ult.length) return '<li class="text-muted">Os produtos aparecem aqui conforme as páginas são lidas.</li>';
+  return ult.map(function (p) {
+    return '<li><span class="prod-nome">' + esc(p.nome) + '</span>' + (p.preco ? ' <span class="preco">' + esc(p.preco) + '</span>' : '') + ' <span class="text-muted">· pág. ' + esc(p._pagina || '') + '</span></li>';
+  }).join('');
+}
+function aoEventoImportacao(imp, ev) {
+  if (ESTADO.importacao !== imp || imp.fase !== 'lendo') return;
+  var status = $('imp-status');
+  if (ev.tipo === 'pagina') {
+    var p = ev.pagina;
+    var chip = $('imp-pg-' + p.n);
+    if (chip) { chip.className = 'pg-chip ' + classeChip(p); chip.title = tituloChip(p, p.n); }
+    if (p.produtos && p.produtos.length && (p.estado === 'ok' || p.metodo === 'ia_texto')) {
+      imp.previa = p.produtos.slice(-3).map(function (x) { return Object.assign({ _pagina: p.n }, x); }).concat(imp.previa || []).slice(0, 6);
+      var lista = $('imp-previa-lista');
+      if (lista) lista.innerHTML = htmlPrevia(imp);
+    }
+    var r = ev.resumo;
+    var pct = r.total ? Math.round((r.feitas / r.total) * 100) : 0;
+    if ($('imp-prog-texto')) $('imp-prog-texto').textContent = r.feitas + ' de ' + r.total + ' ' + plural(r.total, 'página', 'páginas');
+    if ($('imp-prog-pct')) $('imp-prog-pct').textContent = pct + '%';
+    if ($('imp-prog-fill')) $('imp-prog-fill').style.width = pct + '%';
+    if ($('imp-prog-barra')) $('imp-prog-barra').setAttribute('aria-valuenow', String(pct));
+    if ($('imp-n-produtos')) $('imp-n-produtos').textContent = numero(r.produtos);
+    if ($('imp-n-ia')) $('imp-n-ia').textContent = numero(r.comIA);
+    if (status && p.estado === 'lendo') status.textContent = 'Página ' + p.n + ': ' + (p.metodo === 'ia_visao' ? 'a IA está lendo a imagem…' : (p.metodo === 'ocr' ? 'lendo com OCR…' : 'lendo…'));
+    if (r.cotaAcabou && status) status.textContent = 'A cota gratuita de IA de hoje acabou: as próximas páginas são lidas sem IA.';
+  } else if (ev.tipo === 'ocr' && status) {
+    status.textContent = 'Página ' + ev.pagina + ': lendo com OCR… ' + (ev.pct || 0) + '%';
+  } else if (ev.tipo === 'ia' && status) {
+    status.textContent = 'Página ' + ev.pagina + ': ' + (ev.continuacao ? 'a IA está lendo o restante da tabela' : 'a IA está lendo a imagem') +
+      (ev.tentativa > 1 ? ' (tentativa ' + ev.tentativa + ')' : '') + '…';
+  } else if (ev.tipo === 'continua' && status) {
+    status.textContent = 'Página ' + ev.pagina + ': muitos produtos (' + numero(ev.produtos) + ' até agora), lendo o restante…';
+  } else if (ev.tipo === 'texto_ia' && status) {
+    status.textContent = 'A IA está organizando o texto das páginas: parte ' + ev.bloco + ' de ' + ev.total + '…';
+  } else if (ev.tipo === 'analise' && status) {
+    status.textContent = 'Conferindo se o PDF já está organizado…';
+  } else if (ev.tipo === 'organizado' && status) {
+    status.textContent = 'O PDF já está ' + (NOMES_FORMATO_PRONTO[ev.formato] || 'organizado') + ': li sem gastar a IA.';
+  }
+}
+
+// Depois da leitura: junta os dados do fornecedor e confere com os já cadastrados
+function prepararRevisao(imp) {
+  var res = imp.resultado;
+  var lista = imp.fornecedorId ? Promise.resolve() : (ESTADO.fornecedoresCarregados ? Promise.resolve() : apiGet('/api/fornecedores?por_pagina=200').then(function (r) {
+    ESTADO.fornecedores = r.fornecedores || [];
+    ESTADO.fornecedoresCarregados = true;
+  }).catch(function () { /* a lista é opcional */ }));
+  var det = apiPost('/api/extracao/fornecedor', { fornecedores: res.fornecedores.slice(0, 200), texto: res.texto.slice(0, 300000), nome_arquivo: imp.nomeArquivo })
+    .then(function (d) { imp.deteccao = d; }, function () { imp.deteccao = { fornecedor: {}, parecidos: [] }; });
+  return Promise.all([lista, det]);
+}
+
+function produtosRevisao(imp) {
+  var termos = normalizar(imp.filtro || '').split(' ').filter(Boolean);
+  return imp.resultado.produtos.filter(function (p) {
+    if (!termos.length) return true;
+    if (!p._busca) p._busca = normalizar([p.nome, p.codigo, p.bitola, p.tensao, p.norma, p.categoria, p.preco].join(' '));
+    for (var i = 0; i < termos.length; i++) if (p._busca.indexOf(termos[i]) < 0) return false;
+    return true;
+  });
+}
+function qtdSelecionados(imp) {
+  return imp.resultado.produtos.filter(function (p) { return !imp.excluidos[p._chave]; }).length;
+}
+function resumoAtributos(p) {
+  var at = p.atributos || {};
+  return Object.keys(at).slice(0, 4).map(function (k) { return k + ': ' + at[k]; }).join(' · ');
+}
+function htmlLinhasRevisao(imp) {
+  var lista = produtosRevisao(imp);
+  if (!lista.length) return '<tr><td colspan="7" class="imp-sem-resultado"><p class="text-muted" style="padding:12px">Nenhum produto com esse filtro.</p></td></tr>';
+  // data-rot: no celular a linha vira cartão e cada célula mostra o rótulo
+  function celula(rotulo, conteudo, classe) {
+    var classes = [classe || '', conteudo ? '' : 'vazia'].join(' ').trim();
+    return '<td data-rot="' + rotulo + '"' + (classes ? ' class="' + classes + '"' : '') + '>' + (conteudo || vazio()) + '</td>';
+  }
+  return lista.slice(0, imp.limite).map(function (p) {
+    var fora = !!imp.excluidos[p._chave];
+    var extra = resumoAtributos(p);
+    return '<tr class="' + (fora ? 'imp-excluido' : '') + '">' +
+      '<td class="centro"><input type="checkbox" class="imp-sel" data-chave="' + esc(p._chave) + '"' + (fora ? '' : ' checked') + ' aria-label="Salvar ' + esc(p.nome) + '"></td>' +
+      '<td class="imp-prod"><div class="prod-nome">' + esc(p.nome) + '</div>' + (p.codigo ? '<span class="cod">' + esc(p.codigo) + '</span>' : '') +
+        (p.categoria ? '<div class="cell-sub">' + esc(p.categoria) + '</div>' : '') + (extra ? '<div class="cell-sub">' + esc(extra) + '</div>' : '') + '</td>' +
+      celula('Medida', p.bitola ? esc(p.bitola) : '') +
+      celula('Tensão', p.tensao ? esc(p.tensao) : '') +
+      celula('Norma', p.norma ? '<span class="norma">' + esc(p.norma) + '</span>' : '') +
+      celula('Preço', p.preco ? '<div class="preco">' + esc(p.preco) + '</div>' + (p.unidade ? '<div class="unid">' + esc(p.unidade) + '</div>' : '') : '', 'num') +
+      celula('Página', p._pagina ? esc(p._pagina) : '', 'centro text-muted') + '</tr>';
+  }).join('');
+}
+function atualizarTabelaRevisao(imp) {
+  html('imp-tbody', htmlLinhasRevisao(imp));
+  var lista = produtosRevisao(imp);
+  var resto = lista.length - Math.min(lista.length, imp.limite);
+  html('imp-mais', resto > 0 ? '<button type="button" class="btn btn-secondary btn-full" data-acao="imp-mais">Mostrar mais ' + numero(Math.min(300, resto)) + ' (faltam ' + numero(resto) + ')</button>' : '');
+  atualizarBotaoSalvar(imp);
+}
+function atualizarBotaoSalvar(imp) {
+  var n = qtdSelecionados(imp);
+  var b = $('imp-btn-salvar');
+  if (b && !b.disabled) b.innerHTML = ICONES.ok + (n ? 'Salvar ' + numero(n) + ' ' + plural(n, 'produto', 'produtos') : 'Salvar o catálogo');
+  var todos = $('imp-todos');
+  if (todos) {
+    var visiveis = produtosRevisao(imp);
+    var marcados = visiveis.filter(function (p) { return !imp.excluidos[p._chave]; }).length;
+    todos.checked = visiveis.length > 0 && marcados === visiveis.length;
+    todos.indeterminate = marcados > 0 && marcados < visiveis.length;
+  }
+}
+
+function htmlFornecedorRevisao(imp) {
+  var det = (imp.deteccao && imp.deteccao.fornecedor) || {};
+  var parecidos = (imp.deteccao && imp.deteccao.parecidos) || [];
+  if (imp.fornecedorId) {
+    var f = imp.fornecedor || ESTADO.fornecedor || {};
+    var linhas = Object.keys(MAPA_FORN_EXISTENTE).filter(function (k) { return det[k]; }).map(function (k) {
+      var atual = f[MAPA_FORN_EXISTENTE[k]];
+      var rot = { telefone: 'Telefone', whatsapp: 'WhatsApp', email: 'E-mail', cnpj: 'CNPJ', site: 'Site', endereco: 'Endereço', especialidade: 'Especialidade' }[k];
+      return '<div><span>' + esc(rot) + '</span><strong>' + esc(det[k]) + '</strong>' +
+        (atual ? '<em class="text-muted">já cadastrado: ' + esc(truncate(atual, 60)) + '</em>' : '<em class="text-ok">vai completar</em>') + '</div>';
+    });
+    if (!linhas.length) return '<div class="card-header"><h3 class="card-title">Fornecedor</h3></div><p class="text-sm">O catálogo não trouxe dados de contato novos para <strong>' + esc(f.nome || '') + '</strong>.</p>';
+    return '<div class="card-header"><h3 class="card-title">Dados do fornecedor encontrados no catálogo</h3></div>' +
+      '<div class="diag-lista imp-dados">' + linhas.join('') + '</div>' +
+      '<label class="check mt-3"><input type="checkbox" id="imp-completar" checked> <span>Completar os campos vazios de <strong>' + esc(f.nome || 'fornecedor') + '</strong> com esses dados</span></label>';
+  }
+  var modo = imp.modoForn || (parecidos.length ? 'existente' : 'novo');
+  imp.modoForn = modo;
+  var existentes = ESTADO.fornecedores || [];
+  var opcoes = existentes.map(function (f) {
+    return '<option value="' + esc(f.id) + '"' + (parecidos[0] && String(parecidos[0].id) === String(f.id) ? ' selected' : '') + '>' + esc(f.nome) + '</option>';
+  }).join('');
+  var campos = CAMPOS_FORN_IMP.map(function (c) {
+    var id = 'imp-f-' + c[0];
+    var campo = c[0] === 'especialidade'
+      ? '<textarea class="textarea" id="' + id + '" rows="2" maxlength="2000">' + esc(det[c[0]] || '') + '</textarea>'
+      : '<input class="input" id="' + id + '" maxlength="' + (c[0] === 'endereco' ? 500 : 255) + '" value="' + esc(det[c[0]] || '') + '"' + (c[0] === 'nome' ? ' required' : '') + '>';
+    return '<div class="form-group' + (c[0] === 'especialidade' || c[0] === 'endereco' ? ' imp-largo' : '') + '"><label class="form-label" for="' + id + '">' + esc(c[1]) + '</label>' + campo + '</div>';
+  }).join('');
+  return '<div class="card-header"><h3 class="card-title">Fornecedor deste catálogo</h3></div>' +
+    (parecidos.length ? '<div class="banner info"><span>Parece ser <strong>' + esc(parecidos[0].nome) + '</strong> (' + esc(parecidos[0].motivo) + '), que você já cadastrou.</span></div>' : '') +
+    '<fieldset class="imp-modo"><legend class="sr-only">Onde salvar os produtos</legend>' +
+      '<label class="radio"><input type="radio" name="imp-modo-forn" value="novo"' + (modo === 'novo' ? ' checked' : '') + '> <span>Criar um fornecedor novo com os dados abaixo</span></label>' +
+      (existentes.length ? '<label class="radio"><input type="radio" name="imp-modo-forn" value="existente"' + (modo === 'existente' ? ' checked' : '') + '> <span>Adicionar a um fornecedor que já cadastrei</span></label>' +
+        '<div class="imp-existente' + (modo === 'existente' ? '' : ' hidden') + '" id="imp-existente-area"><label class="sr-only" for="imp-forn-existente">Fornecedor já cadastrado</label>' +
+        '<select class="select" id="imp-forn-existente">' + opcoes + '</select>' +
+        '<label class="check mt-2"><input type="checkbox" id="imp-completar" checked> <span>Completar os campos vazios dele com os dados abaixo</span></label></div>' : '') +
+    '</fieldset>' +
+    '<div class="imp-campos mt-3' + (modo === 'existente' ? ' imp-campos-ref' : '') + '" id="imp-forn-campos">' + campos + '</div>' +
+    '<p class="form-hint mt-2">Confira os dados: a IA copia do catálogo, mas vale uma olhada no CNPJ e nos telefones.</p>';
+}
+
+// Páginas que valem uma nova leitura: erro, lidas sem a IA (com a IA ligada) ou cortadas por terem produtos demais
+function paginasComProblema(imp) {
+  return imp.resultado.paginas.filter(function (p) {
+    return p.estado === 'erro' || p.parcial || (imp.usarIA && p.estado === 'sem_ia' && p.metodo !== 'ia_texto');
+  });
+}
+function listaPaginas(lista) {
+  return lista.slice(0, 12).map(function (p) { return p.n; }).join(', ') + (lista.length > 12 ? '…' : '');
+}
+function renderRevisao(imp) {
+  if (!importacaoVisivel(imp)) return;
+  var res = imp.resultado;
+  var r = res.resumo;
+  var paginas = res.paginas;
+  var problemas = paginasComProblema(imp);
+  var naoLidas = problemas.filter(function (p) { return !p.parcial; });
+  var parciais = problemas.filter(function (p) { return p.parcial; });
+  var podeReler = problemas.length && imp.usarIA && imp.doc && !(imp.sessao && imp.sessao.estado.cotaAcabou);
+  var avisos = [];
+  if (naoLidas.length) avisos.push(numero(naoLidas.length) + ' ' + plural(naoLidas.length, 'página não foi lida', 'páginas não foram lidas') + ' pela IA (' + listaPaginas(naoLidas) + ').');
+  if (parciais.length) avisos.push(numero(parciais.length) + ' ' + plural(parciais.length, 'página tinha', 'páginas tinham') + ' produtos demais e ' +
+    plural(parciais.length, 'pode ter ficado incompleta', 'podem ter ficado incompletas') + ' (' + listaPaginas(parciais) + ').');
+  var nProd = res.produtos.length;
+  html(imp.ctx.trabalho,
+    '<div class="card imp-card fade-in">' +
+      '<div class="imp-topo"><div><h3 class="card-title">Confira antes de salvar</h3>' +
+        '<p class="mt-1">Encontrei <strong>' + numero(nProd) + ' ' + plural(nProd, 'produto', 'produtos') + '</strong> em ' + numero(paginas.length) + ' ' +
+        plural(paginas.length, 'página', 'páginas') + ' de “' + esc(imp.nomeArquivo) + '”' + (r.comIA ? ' · ' + numero(r.comIA) + ' lidas pela IA' : '') + '.</p>' +
+        (res.formato ? '<p class="text-sm mt-1">' + ICONES.ok.replace('<svg ', '<svg width="14" height="14" style="display:inline;vertical-align:-2px;margin-right:4px" ') +
+          'O PDF já estava ' + esc(NOMES_FORMATO_PRONTO[res.formato] || 'organizado') + ': li o texto direto, sem gastar a cota de IA.</p>' : '') + '</div></div>' +
+      '<div class="imp-paginas mt-3" role="list" aria-label="Situação de cada página">' + htmlChips(imp) + '</div>' +
+      (res.cotaAcabou ? '<div class="banner alerta mt-3"><span>A cota gratuita de IA de hoje acabou durante a leitura: algumas páginas foram lidas sem IA. Amanhã você pode importar essas páginas de novo, com o mesmo arquivo.</span></div>' : '') +
+      (problemas.length ? '<div class="banner ' + (podeReler ? 'info' : 'alerta') + ' mt-3"><span>' + esc(avisos.join(' ')) + '</span>' +
+        (podeReler ? '<div class="acoes"><button type="button" class="btn btn-secondary btn-sm" data-acao="imp-reler">' + ICONES.reler + 'Ler essas páginas de novo</button></div>' : '') + '</div>' : '') +
+      (!nProd ? '<div class="banner alerta mt-3"><span>Nenhum produto foi organizado. Se salvar, o texto lido entra na busca e você pode usar “Organizar com IA” depois.</span></div>' : '') +
+    '</div>' +
+    '<div class="card imp-card" id="imp-forn-card">' + htmlFornecedorRevisao(imp) + '</div>' +
+    (nProd ? '<div class="card imp-card">' +
+      '<div class="card-header imp-cab-produtos"><h3 class="card-title">Produtos encontrados</h3>' +
+        '<div class="input-icone imp-filtro">' + ICONES.busca + '<input class="input" id="imp-filtro" type="search" placeholder="Filtrar: nome, medida, norma…" aria-label="Filtrar produtos encontrados" value="' + esc(imp.filtro || '') + '"></div></div>' +
+      '<div class="table-wrap"><table class="tabela imp-tabela"><caption class="sr-only">Produtos encontrados no catálogo; desmarque os que não quer salvar</caption>' +
+        '<thead><tr><th scope="col" class="centro"><input type="checkbox" id="imp-todos" aria-label="Marcar ou desmarcar todos os produtos visíveis"></th><th scope="col">Produto</th><th scope="col">Medida</th><th scope="col">Tensão</th><th scope="col">Norma</th><th scope="col" class="num">Preço</th><th scope="col" class="centro">Pág.</th></tr></thead>' +
+        '<tbody id="imp-tbody"></tbody></table></div><div id="imp-mais" class="mt-3"></div></div>' : '') +
+    '<div class="imp-acoes"><button type="button" class="btn btn-primary btn-lg" id="imp-btn-salvar" data-acao="imp-salvar">' + ICONES.ok + 'Salvar</button>' +
+      '<button type="button" class="btn btn-ghost" data-acao="imp-descartar-confirmar">Descartar leitura</button></div>');
+  if (nProd) atualizarTabelaRevisao(imp); else atualizarBotaoSalvar(imp);
+}
+
+function lerCampoForn(c) { var el = $('imp-f-' + c); return el ? String(el.value || '').trim() : ''; }
+function salvarImportacao(botao) {
+  var imp = ESTADO.importacao;
+  if (!imp || imp.fase !== 'revisar') return;
+  var res = imp.resultado;
+  var corpo = {
+    nome_arquivo: imp.nomeArquivo + (imp.intervalo && (imp.intervalo.de > 1 || imp.intervalo.ate < imp.doc.paginas) ? ' (páginas ' + imp.intervalo.de + '–' + imp.intervalo.ate + ')' : ''),
+    paginas: imp.intervalo ? imp.intervalo.ate - imp.intervalo.de + 1 : imp.doc.paginas,
+    origem: res.origem,
+    texto: res.texto.slice(0, MAX_TEXTO),
+    resumos: res.resumos.slice(0, 500),
+    fornecedor: imp.deteccao ? imp.deteccao.fornecedor : null,
+    info_ia: res.modelos.length ? 'Lido pela IA (' + res.modelos.slice(0, 3).join(', ') + ')' : '',
+    formato: res.formato || null
+  };
+  if (imp.fornecedorId) {
+    corpo.fornecedor_id = imp.fornecedorId;
+    corpo.completar_fornecedor = $('imp-completar') ? $('imp-completar').checked : true;
+  } else {
+    var modo = (document.querySelector('input[name="imp-modo-forn"]:checked') || {}).value || 'novo';
+    if (modo === 'existente') {
+      corpo.fornecedor_id = parseInt(valor('imp-forn-existente'), 10);
+      corpo.completar_fornecedor = $('imp-completar') ? $('imp-completar').checked : true;
+      var dados = {};
+      CAMPOS_FORN_IMP.forEach(function (c) { var v = lerCampoForn(c[0]); if (v) dados[c[0]] = v; });
+      corpo.fornecedor = dados;
+    } else {
+      var novo = {};
+      CAMPOS_FORN_IMP.forEach(function (c) { novo[c[0]] = lerCampoForn(c[0]); });
+      if (!novo.nome) { showToast('Informe o nome do fornecedor.', 'warning'); $('imp-f-nome').focus(); return; }
+      if (novo.cnpj && !cnpjValido(novo.cnpj)) { showToast(msgCNPJ(novo.cnpj), 'warning'); $('imp-f-cnpj').focus(); return; }
+      corpo.novo_fornecedor = novo;
+    }
+  }
+  var produtos = res.produtos.filter(function (p) { return !imp.excluidos[p._chave]; }).map(function (p) {
+    var limpo = {};
+    Object.keys(p).forEach(function (k) { if (k.charAt(0) !== '_') limpo[k] = p[k]; });
+    return limpo;
+  });
+  if (!produtos.length && corpo.texto.replace(/\s/g, '').length < 20) { showToast('Não há produtos nem texto para salvar.', 'warning'); return; }
+  // envio em partes (a Vercel aceita ~4,5 MB por vez)
+  var lotes = [];
+  var atual = [];
+  var tamanho = 0;
+  produtos.forEach(function (p) {
+    var t = JSON.stringify(p).length;
+    if (atual.length && tamanho + t > 2500000) { lotes.push(atual); atual = []; tamanho = 0; }
+    atual.push(p);
+    tamanho += t;
+  });
+  if (atual.length) lotes.push(atual);
+  if (JSON.stringify(corpo).length + (lotes[0] ? JSON.stringify(lotes[0]).length : 0) > 3800000) corpo.texto = corpo.texto.slice(0, 600000);
+  setLoading(botao, true, 'Salvando…');
+  var salvo = null;
+  apiPost('/api/extracao/importar', Object.assign({}, corpo, { produtos: lotes[0] || [] }), { timeout: 120000 }).then(function (r) {
+    salvo = r;
+    var cadeia = Promise.resolve();
+    lotes.slice(1).forEach(function (lote) {
+      cadeia = cadeia.then(function () { return apiPost('/api/extracao/importar/' + r.catalogo_id + '/produtos', { produtos: lote }, { timeout: 120000 }); });
+    });
+    return cadeia;
+  }).then(function () {
+    imp.fase = 'concluido';
+    imp.salvo = Object.assign({}, salvo, { produtos: produtos.length });
+    if (imp.sessao) imp.sessao.fechar();
+    renderConcluido(imp);
+    showToast(numero(produtos.length) + ' produtos salvos e prontos para a busca!', 'success', 6000);
+    ESTADO.fornecedoresCarregados = false;
+    carregarStats();
+    if (imp.ctx.tela === 'fornecedor' && ESTADO.fornecedor) carregarDetalhe(ESTADO.fornecedor.id);
+  }).catch(function (err) {
+    setLoading(botao, false);
+    atualizarBotaoSalvar(imp);
+    showToast(msgErro(err, 'Não foi possível salvar agora. Tente de novo.') + (salvo ? ' (parte dos produtos já foi salva)' : ''), 'error', 7000);
+  });
+}
+
+function renderConcluido(imp) {
+  if (!importacaoVisivel(imp)) return;
+  var r = imp.salvo || {};
+  var nome = imp.fornecedorId ? (imp.fornecedor ? imp.fornecedor.nome : 'o fornecedor')
+    : (r.fornecedor_criado ? lerNomeSalvo(imp) : 'o fornecedor escolhido');
+  html(imp.ctx.trabalho, '<div class="resultado-ok imp-card fade-in" role="status">' +
+    '<h3 class="card-title">' + ICONES.ok.replace('<svg ', '<svg width="20" height="20" style="display:inline;vertical-align:-4px;margin-right:6px" ') +
+      'Pronto! ' + numero(r.produtos || 0) + ' ' + plural(r.produtos || 0, 'produto salvo', 'produtos salvos') + '</h3>' +
+    '<p class="mt-2">' + (r.fornecedor_criado ? 'Fornecedor <strong>' + esc(nome) + '</strong> cadastrado com os dados do catálogo. ' : 'Catálogo adicionado a <strong>' + esc(nome) + '</strong>. ') +
+      'Os produtos já aparecem na busca.</p>' +
+    (r.fornecedor_atualizado && r.fornecedor_atualizado.length ? '<p class="mt-2">Dados completados: ' + esc(r.fornecedor_atualizado.join(', ')) + '.</p>' : '') +
+    '<div class="flex gap-2 mt-4" style="flex-wrap:wrap">' +
+      (imp.ctx.tela === 'fornecedor'
+        ? '<button type="button" class="btn btn-primary" data-acao="aba" data-aba="produtos">Ver produtos</button>'
+        : '<button type="button" class="btn btn-primary" data-acao="ver-fornecedor" data-id="' + esc(r.fornecedor_id) + '">Ver fornecedor e produtos</button>') +
+      '<button type="button" class="btn btn-secondary" data-acao="ir" data-secao="busca">' + ICONES.busca + 'Buscar produtos</button>' +
+      '<button type="button" class="btn btn-ghost" data-acao="imp-novo">' + ICONES.enviar + 'Importar outro catálogo</button>' +
+    '</div></div>');
+}
+function lerNomeSalvo(imp) {
+  var el = $('imp-f-nome');
+  if (el && el.value) imp.nomeSalvo = el.value;
+  return imp.nomeSalvo || (imp.deteccao && imp.deteccao.fornecedor && imp.deteccao.fornecedor.nome) || 'novo fornecedor';
+}
+
+function cancelarImportacao() {
+  var imp = ESTADO.importacao;
+  if (!imp || !imp.sessao) return;
+  imp.sessao.cancelar();
+}
+function descartarImportacao(silencioso) {
+  var imp = ESTADO.importacao;
+  if (!imp) return;
+  if (imp.sessao) imp.sessao.fechar();
+  else if (imp.doc) { try { imp.doc.fechar(); } catch (e) { /* ignora */ } }
+  ESTADO.importacao = null;
+  mostrar(imp.ctx.entrada, true);
+  html(imp.ctx.trabalho, '');
+  if (!silencioso) showToast('Leitura descartada.', 'info');
+}
+function relerPaginasImportacao(botao) {
+  var imp = ESTADO.importacao;
+  if (!imp || imp.fase !== 'revisar' || !imp.sessao) return;
+  var lista = paginasComProblema(imp).map(function (p) { return p.n; });
+  if (!lista.length) return;
+  setLoading(botao, true, 'Lendo…');
+  imp.fase = 'lendo';
+  renderProgresso(imp);
+  imp.sessao.relerPaginas(lista).then(function (res) {
+    if (ESTADO.importacao !== imp) return;
+    imp.resultado = res;
+    imp.fase = 'revisar';
+    return prepararRevisao(imp).then(function () { renderRevisao(imp); });
+  }).catch(function (err) {
+    if (ESTADO.importacao !== imp) return;
+    imp.fase = 'revisar';
+    renderRevisao(imp);
+    if (!(err && err.code === 'CANCELADO')) showToast(msgErro(err, 'Não consegui reler as páginas.'), 'error');
+  });
+}
+function aoMudarRevisao(e) {
+  var imp = ESTADO.importacao;
+  var alvo = e.target;
+  if (!imp || imp.fase !== 'revisar' || !alvo) return;
+  if (alvo.classList && alvo.classList.contains('imp-sel')) {
+    var chave = alvo.getAttribute('data-chave');
+    if (alvo.checked) delete imp.excluidos[chave]; else imp.excluidos[chave] = 1;
+    var tr = alvo.closest('tr');
+    if (tr) tr.classList.toggle('imp-excluido', !alvo.checked);
+    atualizarBotaoSalvar(imp);
+  } else if (alvo.id === 'imp-todos') {
+    produtosRevisao(imp).forEach(function (p) { if (alvo.checked) delete imp.excluidos[p._chave]; else imp.excluidos[p._chave] = 1; });
+    atualizarTabelaRevisao(imp);
+  } else if (alvo.name === 'imp-modo-forn') {
+    imp.modoForn = alvo.value;
+    mostrar('imp-existente-area', alvo.value === 'existente');
+    var campos = $('imp-forn-campos');
+    if (campos) campos.classList.toggle('imp-campos-ref', alvo.value === 'existente');
+  }
+}
+var filtrarRevisao = debounce(function () {
+  var imp = ESTADO.importacao;
+  if (!imp || imp.fase !== 'revisar') return;
+  imp.filtro = valor('imp-filtro');
+  imp.limite = IMP_LIMITE_TABELA;
+  atualizarTabelaRevisao(imp);
+}, 180);
 
 var RE_MARCADOR_PRODUTO = /^(?:produto|item)\s*(?:n[º°o]\.?\s*|#\s*)?(\d{1,5})(?:\s*[:\-–—.)|]\s*|\s+|$)/i;
 function limparLinhaColada(l) {
@@ -1130,8 +1776,16 @@ function indexarColado() {
   html('resultado-colar', '');
   apiPost('/api/extracao/texto/' + fid, { texto: texto, nome_arquivo: nome, origem: 'texto_colado' }, { timeout: 120000 }).then(function (r) {
     setLoading(btn, false);
-    if (r.ia === 'na_fila') ESTADO.iaEsperada = { id: r.catalogo_id, fornecedor: fid, ate: Date.now() + 180000 };
     html('resultado-colar', resumoIndexacao(r));
+    if (r.ia === 'disponivel' && ESTADO.fornecedorId === fid) {
+      apiGet('/api/fornecedores/' + fid).then(function (f) {
+        if (ESTADO.fornecedorId !== fid) return;
+        ESTADO.fornecedor = f;
+        mudarAba('catalogos', true);
+        renderCatalogos();
+        organizarComIA(r.catalogo_id);
+      }).catch(function () { /* o botão Organizar com IA continua disponível */ });
+    }
     $('colar-texto').value = '';
     $('colar-nome').value = '';
     atualizarContadorColado();
@@ -1314,6 +1968,10 @@ function renderAdminDiagnostico(d) {
     linha('Banco de dados', d.banco && d.banco.ok ? ok + ' · ' + esc(d.banco.ms) + ' ms' : '<span style="color:var(--danger)">fora do ar</span>') +
     linha('Proteção das tabelas (RLS)', !rls.length ? '—' : (semRls.length ? '<span style="color:var(--warning)">desligada em ' + esc(semRls.join(', ')) + '</span>' : '<span class="text-ok">ligada em ' + rls.length + ' tabelas</span>')) +
     linha('IA (OpenRouter)', iaTxt) +
+    (ia.configurada ? linha('Leitura de páginas pela IA', ia.visao ? ok + ' · ' + esc(ia.modelos_visao) + ' modelos gratuitos de imagem' + (ia.modelo_visao ? ' · ' + esc(ia.modelo_visao) : '')
+      : '<span style="color:var(--warning)">nenhum modelo gratuito de imagem disponível agora</span>') : '') +
+    (ia.cota && ia.cota.limite ? linha('Cota gratuita de hoje', esc(numero(ia.cota.restante)) + ' de ' + esc(numero(ia.cota.limite)) + ' leituras restantes' +
+      (ia.cota.limite <= 50 ? ' <span class="text-sm text-muted">(com US$ 10 em créditos no OpenRouter sobe para 1.000 por dia)</span>' : '')) : '') +
     (ia.ultimo_erro ? linha('Último erro da IA', '<span class="text-sm">' + esc(ia.ultimo_erro) + '</span>') : '') +
     linha('E-mail de recuperação de senha', d.email && d.email.configurado ? ok : '<span style="color:var(--warning)">não configurado</span>') +
     linha('Administradores configurados', esc(d.admin_emails)) +
@@ -1432,12 +2090,30 @@ function aoClicar(e) {
     case 'modo-entrada': mudarModoEntrada(el.getAttribute('data-modo')); break;
     case 'copiar-prompt': copiarPromptMestre(el); break;
     case 'indexar-colado': indexarColado(); break;
-    case 'cancelar-leitura': cancelarLeitura(); break;
+    case 'imp-comecar': comecarLeitura(); break;
+    case 'imp-cancelar': cancelarImportacao(); el.disabled = true; el.textContent = 'Cancelando…'; break;
+    case 'imp-descartar': descartarImportacao(true); break;
+    case 'imp-descartar-confirmar':
+      confirmar('Descartar leitura', 'Os produtos lidos deste catálogo não serão salvos. Descartar mesmo assim?', 'Descartar', function () { descartarImportacao(); });
+      break;
+    case 'imp-salvar': salvarImportacao(el); break;
+    case 'imp-reler': relerPaginasImportacao(el); break;
+    case 'imp-mais': if (ESTADO.importacao) { ESTADO.importacao.limite += 300; atualizarTabelaRevisao(ESTADO.importacao); } break;
+    case 'imp-novo':
+      var telaNovo = ESTADO.importacao ? ESTADO.importacao.ctx.tela : 'importar';
+      descartarImportacao(true);
+      mostrarImportacao(telaNovo);
+      break;
+    case 'imp-ir':
+      if (ESTADO.importacao) navegar(ESTADO.importacao.ctx.tela === 'fornecedor' ? 'fornecedor/' + ESTADO.importacao.fornecedorId + '/adicionar' : 'importar');
+      break;
+    case 'adicionar-catalogo': navegar('fornecedor/' + id + '/adicionar'); break;
     case 'detalhes-produto': alternarDetalhesProduto(el); break;
     case 'mais-produtos': ESTADO.produtosLimite += 200; renderProdutos(); break;
     case 'exportar-produtos': exportarProdutosCSV(); break;
     case 'reprocessar': reprocessarCatalogo(cid, el); break;
-    case 'estruturar': estruturarCatalogo(cid, el); break;
+    case 'estruturar': organizarComIA(cid); break;
+    case 'organizar-parar': if (ESTADO.organizando) { ESTADO.organizando.parar = true; el.disabled = true; el.textContent = 'Parando…'; } break;
     case 'excluir-catalogo': pedirExclusaoCatalogo(cid); break;
     case 'confirmar-ok': executarConfirmacao(el); break;
     case 'fechar-modal': closeModal(el.getAttribute('data-modal')); break;
@@ -1456,6 +2132,29 @@ function aoClicar(e) {
   }
 }
 
+function ligarDropzone(idZona, idInput, tela) {
+  var dz = $(idZona);
+  var input = $(idInput);
+  if (!dz || !input) return;
+  dz.addEventListener('click', function () { input.click(); });
+  dz.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+  });
+  dz.addEventListener('dragover', function (e) { e.preventDefault(); dz.classList.add('arrastando'); });
+  dz.addEventListener('dragleave', function () { dz.classList.remove('arrastando'); });
+  dz.addEventListener('drop', function (e) {
+    e.preventDefault();
+    dz.classList.remove('arrastando');
+    var arquivos = e.dataTransfer && e.dataTransfer.files;
+    if (arquivos && arquivos.length) iniciarImportacao(arquivos, tela);
+  });
+  input.addEventListener('change', function () {
+    var arquivos = Array.prototype.slice.call(input.files || []);
+    input.value = '';
+    if (arquivos.length) iniciarImportacao(arquivos, tela);
+  });
+}
+
 function ligarEventos() {
   document.addEventListener('click', aoClicar);
   $('form-busca').addEventListener('submit', function (e) { e.preventDefault(); buscar(); });
@@ -1468,25 +2167,10 @@ function ligarEventos() {
   $('colar-texto').addEventListener('input', debounce(atualizarContadorColado, 200));
   document.querySelector('.abas-nav').addEventListener('keydown', teclasAbas);
 
-  var dz = $('dropzone');
-  var input = $('input-arquivo');
-  dz.addEventListener('click', function () { input.click(); });
-  dz.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
-  });
-  dz.addEventListener('dragover', function (e) { e.preventDefault(); dz.classList.add('arrastando'); });
-  dz.addEventListener('dragleave', function () { dz.classList.remove('arrastando'); });
-  dz.addEventListener('drop', function (e) {
-    e.preventDefault();
-    dz.classList.remove('arrastando');
-    var arq = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (arq) processarArquivo(arq);
-  });
-  input.addEventListener('change', function () {
-    var arq = input.files && input.files[0];
-    input.value = '';
-    if (arq) processarArquivo(arq);
-  });
+  ligarDropzone('dropzone', 'input-arquivo', 'fornecedor');
+  ligarDropzone('dz-importar', 'input-importar', 'importar');
+  document.addEventListener('change', aoMudarRevisao);
+  document.addEventListener('input', function (e) { if (e.target && e.target.id === 'imp-filtro') filtrarRevisao(); });
 
   window.addEventListener('hashchange', rotear);
   window.addEventListener('lf:plano-expirado', aoPlanoExpirado);
@@ -1494,7 +2178,8 @@ function ligarEventos() {
     if (!ehMobile()) { fecharMenuMobile(); prepararMenu(); }
   }, 200));
   window.addEventListener('beforeunload', function (e) {
-    if (ESTADO.leitura) { e.preventDefault(); e.returnValue = ''; }
+    var imp = ESTADO.importacao;
+    if ((imp && (imp.fase === 'lendo' || imp.fase === 'revisar')) || ESTADO.organizando) { e.preventDefault(); e.returnValue = ''; }
   });
 }
 

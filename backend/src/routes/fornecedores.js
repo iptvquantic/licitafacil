@@ -5,6 +5,7 @@ const multer = require('multer');
 const { query } = require('../utils/db');
 const { requireAuth, requireAcessoEscrita } = require('../middleware/auth');
 const indexacao = require('../services/indexacao.service');
+const extrator = require('../services/extrator.service');
 const { deleteFile } = require('../services/storage.service');
 
 const router = express.Router();
@@ -28,14 +29,25 @@ function limpar(v, max) {
 
 function dadosFornecedor(body) {
   const whatsapp = limpar(body.whatsapp, 50);
+  const cnpj = limpar(body.cnpj, 30);
+  const site = limpar(body.site, 255);
   return {
     nome: limpar(body.nome, 255),
     email: limpar(body.email, 255),
     telefone: limpar(body.telefone, 50),
     whatsapp: whatsapp,
     whatsapp_link: indexacao.waLink(whatsapp),
-    observacoes: limpar(body.observacoes, 2000)
+    observacoes: limpar(body.observacoes, 2000),
+    cnpj: cnpj ? (extrator.cnpjValido(cnpj) ? extrator.formatarCNPJ(cnpj) : cnpj) : null,
+    site: site ? (extrator.normalizarSite(site) || site) : null,
+    endereco: limpar(body.endereco, 500)
   };
+}
+
+function validarFornecedor(d) {
+  if (!d.nome) return 'Informe o nome do fornecedor.';
+  if (d.cnpj && !extrator.cnpjValido(d.cnpj)) return 'Confira o CNPJ: os dígitos não batem.';
+  return null;
 }
 
 function nomeArquivoUtf8(nome) {
@@ -63,11 +75,11 @@ router.get('/', async (req, res) => {
     let where = 'WHERE f.usuario_id = $1 AND f.ativo = 1';
     if (busca) {
       params.push('%' + busca.replace(/[\\%_]/g, '\\$&') + '%');
-      where += ' AND (f.nome ILIKE $2 OR f.email ILIKE $2 OR f.telefone ILIKE $2 OR f.whatsapp ILIKE $2 OR f.observacoes ILIKE $2)';
+      where += ' AND (f.nome ILIKE $2 OR f.email ILIKE $2 OR f.telefone ILIKE $2 OR f.whatsapp ILIKE $2 OR f.observacoes ILIKE $2 OR f.cnpj ILIKE $2 OR f.site ILIKE $2)';
     }
     const [dados, total] = await Promise.all([
       query(
-        'SELECT f.id, f.nome, f.email, f.telefone, f.whatsapp, f.whatsapp_link, f.observacoes, f.criado_em, f.atualizado_em,' +
+        'SELECT f.id, f.nome, f.email, f.telefone, f.whatsapp, f.whatsapp_link, f.observacoes, f.cnpj, f.site, f.endereco, f.criado_em, f.atualizado_em,' +
         " (SELECT count(*) FROM catalogos c WHERE c.fornecedor_id = f.id AND c.status = 'processado')::int AS total_catalogos," +
         ' (SELECT count(*) FROM chunks ch WHERE ch.fornecedor_id = f.id)::int AS total_chunks,' +
         ' (SELECT count(*) FROM produtos p WHERE p.fornecedor_id = f.id)::int AS total_produtos' +
@@ -86,10 +98,12 @@ router.get('/', async (req, res) => {
 router.post('/', upload.single('catalogo'), async (req, res) => {
   try {
     const d = dadosFornecedor(req.body);
-    if (!d.nome) return res.status(400).json({ error: 'Informe o nome do fornecedor.' });
+    const invalido = validarFornecedor(d);
+    if (invalido) return res.status(400).json({ error: invalido });
     const r = await query(
-      'INSERT INTO fornecedores (usuario_id, nome, email, telefone, whatsapp, whatsapp_link, observacoes) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [req.usuario.id, d.nome, d.email, d.telefone, d.whatsapp, d.whatsapp_link, d.observacoes]);
+      'INSERT INTO fornecedores (usuario_id, nome, email, telefone, whatsapp, whatsapp_link, observacoes, cnpj, site, endereco)' +
+      ' VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
+      [req.usuario.id, d.nome, d.email, d.telefone, d.whatsapp, d.whatsapp_link, d.observacoes, d.cnpj, d.site, d.endereco]);
     const fornecedor = r.rows[0];
     let catalogo = null;
     if (req.file) {
@@ -146,11 +160,13 @@ router.get('/:id/produtos', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const d = dadosFornecedor(req.body);
-    if (!d.nome) return res.status(400).json({ error: 'Informe o nome do fornecedor.' });
+    const invalido = validarFornecedor(d);
+    if (invalido) return res.status(400).json({ error: invalido });
     const r = await query(
-      'UPDATE fornecedores SET nome = $1, email = $2, telefone = $3, whatsapp = $4, whatsapp_link = $5, observacoes = $6, atualizado_em = NOW()' +
-      ' WHERE id = $7 AND usuario_id = $8 AND ativo = 1 RETURNING *',
-      [d.nome, d.email, d.telefone, d.whatsapp, d.whatsapp_link, d.observacoes, req.params.id, req.usuario.id]);
+      'UPDATE fornecedores SET nome = $1, email = $2, telefone = $3, whatsapp = $4, whatsapp_link = $5, observacoes = $6,' +
+      ' cnpj = $7, site = $8, endereco = $9, atualizado_em = NOW()' +
+      ' WHERE id = $10 AND usuario_id = $11 AND ativo = 1 RETURNING *',
+      [d.nome, d.email, d.telefone, d.whatsapp, d.whatsapp_link, d.observacoes, d.cnpj, d.site, d.endereco, req.params.id, req.usuario.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'Fornecedor não encontrado' });
     res.json({ ok: true, fornecedor: r.rows[0] });
   } catch (err) {
@@ -218,18 +234,30 @@ router.post('/:id/catalogo/:cid/reprocessar', async (req, res) => {
   }
 });
 
-// POST /api/fornecedores/:id/catalogo/:cid/estruturar — pede à IA para montar a tabela de produtos
+// GET /api/fornecedores/:id/catalogo/:cid/estruturar — quantas partes a IA vai ler (o navegador conduz)
+router.get('/:id/catalogo/:cid/estruturar', async (req, res) => {
+  try {
+    const out = await indexacao.partesDoCatalogo({ usuarioId: req.usuario.id, fornecedorId: req.params.id, catalogoId: req.params.cid });
+    res.json(out);
+  } catch (err) {
+    if (err.amigavel) return res.status(err.status).json({ error: err.message });
+    console.error('Erro ao contar partes:', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// POST /api/fornecedores/:id/catalogo/:cid/estruturar  { parte } — a IA organiza uma parte do texto salvo
 router.post('/:id/catalogo/:cid/estruturar', async (req, res) => {
   try {
-    const c = await catalogoDoUsuario(req.params.id, req.params.cid, req.usuario.id);
-    if (!c) return res.status(404).json({ error: 'Catálogo não encontrado' });
-    if (!c.texto_extraido) return res.status(400).json({ error: 'Este catálogo não tem texto salvo.' });
-    if (!require('../services/ai.service').configurada()) return res.status(503).json({ error: 'A IA não está configurada no servidor.' });
-    await indexacao.agendarEstruturacao(c.id);
-    res.status(202).json({ ok: true, msg: 'A IA começou a estruturar os produtos. Isso pode levar alguns minutos.' });
+    const out = await indexacao.estruturarParte({ usuarioId: req.usuario.id, fornecedorId: req.params.id, catalogoId: req.params.cid,
+      parte: req.body.parte, contexto: req.body.contexto });
+    res.json(Object.assign({ ok: true }, out));
   } catch (err) {
+    if (err.amigavel) return res.status(err.status).json({ error: err.message });
+    // falha da IA gratuita é esperada: 200 com ok:false (o navegador decide se tenta de novo, sem erro de rede no console)
+    if (err.code) return res.json({ ok: false, error: err.mensagem || indexacao.mensagemErroIA(err), code: err.code });
     console.error('Erro ao estruturar:', err.message);
-    res.status(500).json({ error: 'Erro ao iniciar a estruturação' });
+    res.status(500).json({ error: 'Erro ao organizar com a IA' });
   }
 });
 

@@ -302,5 +302,131 @@ var LeitorCatalogo = (function () {
     aoProgredirOCR = null;
   }
 
-  return { ler: ler, cancelar: cancelar, tipoDoArquivo: tipoDoArquivo, montarLinhas: montarLinhas, LIBS: LIBS };
+  // ─── Leitura página por página (para a IA ler a imagem de cada página) ─────
+  var LADO_IMAGEM_IA = 1700;      // px no lado maior (~200 dpi numa folha A4): tabelas pequenas continuam legíveis
+  var LIMITE_IMAGEM_IA = 3200000; // tamanho máximo da imagem em base64 (a Vercel aceita até ~4,5 MB por envio)
+
+  function canvasParaJPEG(canvas) {
+    var qualidade = 0.85;
+    var url = canvas.toDataURL('image/jpeg', qualidade);
+    while (url.length > LIMITE_IMAGEM_IA && qualidade > 0.45) {
+      qualidade -= 0.1;
+      url = canvas.toDataURL('image/jpeg', qualidade);
+    }
+    return url;
+  }
+
+  function reduzirCanvas(canvas, ladoMax) {
+    var escala = Math.min(1, ladoMax / Math.max(canvas.width, canvas.height));
+    if (escala >= 1) return canvas;
+    var c2 = document.createElement('canvas');
+    c2.width = Math.max(1, Math.round(canvas.width * escala));
+    c2.height = Math.max(1, Math.round(canvas.height * escala));
+    var ctx = c2.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(canvas, 0, 0, c2.width, c2.height);
+    return c2;
+  }
+
+  function imagemComFundoBranco(largura, altura, desenhar) {
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(largura));
+    canvas.height = Math.max(1, Math.round(altura));
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    return Promise.resolve(desenhar(ctx, canvas)).then(function () { return canvas; });
+  }
+
+  // Abre PDF ou fotos e devolve um "documento" com acesso por página
+  function abrirDocumento(arquivos) {
+    arquivos = Array.prototype.slice.call(arquivos || []);
+    if (!arquivos.length) return Promise.reject(erro('Escolha o arquivo do catálogo.', 'FORMATO'));
+    var tipos = arquivos.map(tipoDoArquivo);
+    if (tipos.some(function (t) { return !t; })) return Promise.reject(erro('Formato não suportado. Envie PDF, JPG, PNG ou WEBP.', 'FORMATO'));
+    if (tipos.indexOf('pdf') >= 0 && arquivos.length > 1) return Promise.reject(erro('Envie um PDF por vez (ou várias fotos do mesmo catálogo).', 'FORMATO'));
+
+    if (tipos[0] === 'imagem') {
+      var docImg = {
+        tipo: 'imagens',
+        paginas: arquivos.length,
+        nome: arquivos.length === 1 ? arquivos[0].name : arquivos.length + ' fotos',
+        textoPagina: function () { return Promise.resolve(''); },
+        imagemPagina: function (n, ladoMax) {
+          return carregarImagem(arquivos[n - 1]).then(function (im) {
+            var escala = Math.min(1, (ladoMax || LADO_IMAGEM_IA) / Math.max(im.w, im.h));
+            return imagemComFundoBranco(im.w * escala, im.h * escala, function (ctx, canvas) {
+              ctx.drawImage(im.img, 0, 0, canvas.width, canvas.height);
+              if (im.img.close) im.img.close();
+              if (im.url) URL.revokeObjectURL(im.url);
+            });
+          }).then(function (canvas) {
+            var url = canvasParaJPEG(canvas);
+            canvas.width = 0; canvas.height = 0;
+            return url;
+          });
+        },
+        ocrPagina: function (n, progresso) {
+          return lerImagem(arquivos[n - 1], {
+            aoProgredir: function (t, pct) { if (progresso) progresso(pct); },
+            cancelado: function () { return false; }
+          }).then(function (r) { return r.texto; });
+        },
+        fechar: function () { /* nada a liberar */ }
+      };
+      return Promise.resolve(docImg);
+    }
+
+    var arquivo = arquivos[0];
+    return carregarPdfjs().then(function (pdfjsLib) {
+      return arquivo.arrayBuffer().then(function (buf) {
+        return pdfjsLib.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise;
+      }).catch(function (err) {
+        if (err && err.name === 'PasswordException') throw erro('Este PDF tem senha. Abra no seu computador, salve uma cópia sem senha e envie de novo.', 'PDF_SENHA');
+        throw erro('Não consegui abrir este PDF. Ele pode estar corrompido. Tente salvar uma nova cópia e enviar de novo.', 'PDF_INVALIDO');
+      });
+    }).then(function (doc) {
+      return {
+        tipo: 'pdf',
+        paginas: doc.numPages,
+        nome: arquivo.name,
+        textoPagina: function (n) {
+          return doc.getPage(n).then(function (pg) {
+            return textoDaPagina(pg).then(function (t) { pg.cleanup(); return t; });
+          });
+        },
+        imagemPagina: function (n, ladoMax) {
+          return doc.getPage(n).then(function (pg) {
+            var base = pg.getViewport({ scale: 1 });
+            var escala = Math.max(0.5, Math.min(4, (ladoMax || LADO_IMAGEM_IA) / Math.max(base.width, base.height)));
+            var vp = pg.getViewport({ scale: escala });
+            return imagemComFundoBranco(vp.width, vp.height, function (ctx) {
+              return pg.render({ canvasContext: ctx, viewport: vp }).promise;
+            }).then(function (canvas) {
+              pg.cleanup();
+              var final = reduzirCanvas(canvas, ladoMax || LADO_IMAGEM_IA);
+              var url = canvasParaJPEG(final);
+              canvas.width = 0; canvas.height = 0;
+              if (final !== canvas) { final.width = 0; final.height = 0; }
+              return url;
+            });
+          });
+        },
+        ocrPagina: function (n, progresso) {
+          ocrEmAndamento = true;
+          return obterWorkerOCR().then(function (worker) {
+            aoProgredirOCR = function (m) { if (progresso && m && m.status === 'recognizing text') progresso(Math.round((m.progress || 0) * 100)); };
+            return doc.getPage(n).then(function (pg) {
+              return ocrPaginaPDF(worker, pg).then(function (t) { pg.cleanup(); return t; });
+            });
+          }).then(function (t) { ocrEmAndamento = false; aoProgredirOCR = null; return t; }, function (err) {
+            ocrEmAndamento = false; aoProgredirOCR = null; throw err;
+          });
+        },
+        fechar: function () { try { doc.destroy(); } catch (e) { /* ignora */ } }
+      };
+    });
+  }
+
+  return { ler: ler, cancelar: cancelar, tipoDoArquivo: tipoDoArquivo, montarLinhas: montarLinhas, abrirDocumento: abrirDocumento, LIBS: LIBS };
 })();

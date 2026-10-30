@@ -47,6 +47,30 @@ function variantes(t, modo) {
 
 function limparToken(v) { return String(v || '').replace(/^[.\/]+|[.\/]+$/g, ''); }
 
+// Plural → singular (português, regra leve): "cabos" → "cabo", "disjuntores" → "disjuntor", "flexiveis" → "flexivel"
+function singular(t) {
+  if (!t || t.length < 4 || /\d/.test(t)) return t;
+  if (/oes$/.test(t) || /aes$/.test(t)) return t.slice(0, -3) + 'ao';
+  if (/ais$/.test(t)) return t.slice(0, -3) + 'al';
+  if (/eis$/.test(t) && t.length >= 5) return t.slice(0, -3) + 'el';
+  if (/ois$/.test(t)) return t.slice(0, -3) + 'ol';
+  if (/uis$/.test(t)) return t.slice(0, -3) + 'ul';
+  if (/[rz]es$/.test(t)) return t.slice(0, -2);
+  if (/ns$/.test(t)) return t.slice(0, -2) + 'm';
+  if (/[^s]s$/.test(t)) return t.slice(0, -1);
+  return t;
+}
+
+// Formas de uma palavra que contam como a mesma: plural, singular e a raiz sem a vogal final (elétrico = elétrica)
+function raizes(t) {
+  if (!t || /\d/.test(t) || t.length < 4) return [t];
+  var out = [t];
+  var s = singular(t);
+  if (s !== t && s.length >= 3) out.push(s);
+  if (s.length >= 6 && /[oa]$/.test(s)) out.push(s.slice(0, -1));
+  return out;
+}
+
 function tokenValido(v) {
   if (!v) return false;
   if (/\d/.test(v)) return true;
@@ -61,7 +85,9 @@ function brutos(texto) {
 function tokensDoc(texto) {
   var set = new Set();
   brutos(texto).forEach(function (t) {
-    variantes(t, 'doc').forEach(function (v) { v = limparToken(v); if (tokenValido(v)) set.add(v); });
+    variantes(t, 'doc').forEach(function (v) {
+      raizes(limparToken(v)).forEach(function (r) { if (tokenValido(r)) set.add(r); });
+    });
   });
   return set;
 }
@@ -74,7 +100,9 @@ function gruposBusca(texto) {
     if (vistos[t]) return;
     vistos[t] = true;
     var vars = [];
-    variantes(t, 'consulta').forEach(function (v) { v = limparToken(v); if (tokenValido(v) && vars.indexOf(v) < 0) vars.push(v); });
+    variantes(t, 'consulta').forEach(function (v) {
+      raizes(limparToken(v)).forEach(function (r) { if (tokenValido(r) && vars.indexOf(r) < 0) vars.push(r); });
+    });
     if (vars.length) grupos.push({ termo: t, variantes: vars, tecnico: /\d/.test(t) });
   });
   return grupos.slice(0, 12);
@@ -118,6 +146,8 @@ function cosineSimilarity(v1, v2) {
 
 module.exports = {
   semAcento: semAcento,
+  singular: singular,
+  raizes: raizes,
   normalizarBusca: normalizarBusca,
   tokensDoc: tokensDoc,
   gruposBusca: gruposBusca,

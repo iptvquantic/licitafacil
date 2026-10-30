@@ -134,7 +134,12 @@ async function buscar(consulta, usuarioId, opcoes) {
     db.query(
       'SELECT (SELECT count(*) FROM produtos p JOIN fornecedores f ON f.id = p.fornecedor_id AND f.ativo = 1 WHERE p.usuario_id = $1)::int AS np,' +
       ' (SELECT count(*) FROM chunks ch JOIN fornecedores f ON f.id = ch.fornecedor_id AND f.ativo = 1 WHERE f.usuario_id = $1)::int AS nc',
-      [usuarioId])
+      [usuarioId]),
+    db.query(
+      'SELECT f.id, f.nome, f.observacoes, f.telefone, f.whatsapp, f.whatsapp_link, f.email,' +
+      " (SELECT count(*) FROM catalogos c WHERE c.fornecedor_id = f.id AND c.status = 'processado')::int AS total_catalogos" +
+      ' FROM fornecedores f WHERE f.usuario_id = $1 AND f.ativo = 1' + (fornecedorId ? ' AND f.id = $2' : '') + ' LIMIT 3000',
+      fornecedorId ? [usuarioId, fornecedorId] : [usuarioId])
   ]);
 
   var linhasProd = resultados[0].rows;
@@ -208,9 +213,28 @@ async function buscar(consulta, usuarioId, opcoes) {
     return f;
   });
 
+  // ── fornecedores que trabalham com o tema (nome ou especialidade), mesmo sem catálogo ──
+  var naoTecnicos = grupos.filter(function (g) { return !g.tecnico; });
+  var relacionados = [];
+  if (naoTecnicos.length) {
+    resultados[3].rows.forEach(function (f) {
+      var doc = T.tokensDoc((f.nome || '') + ' ' + (f.observacoes || ''));
+      var casou = naoTecnicos.filter(function (g) { return casaGrupo(g, doc) || casaPrefixo(g, doc); }).length;
+      var s = casou / naoTecnicos.length;
+      if (s < 0.5) return;
+      relacionados.push({
+        id: f.id, nome: f.nome, observacoes: f.observacoes ? String(f.observacoes).slice(0, 200) : '',
+        telefone: f.telefone || null, whatsapp: f.whatsapp || null, whatsapp_link: f.whatsapp_link || null, email: f.email || null,
+        total_catalogos: f.total_catalogos || 0, score: Math.round(s * 100)
+      });
+    });
+    relacionados.sort(function (a, b) { return (b.score - a.score) || a.nome.localeCompare(b.nome, 'pt-BR'); });
+  }
+
   return {
     consulta: consulta,
     termos: grupos.map(function (g) { return g.termo; }),
+    fornecedores_relacionados: relacionados.slice(0, 8),
     produtos: produtos.slice(0, limiteProdutos),
     total_produtos: produtos.length,
     fornecedores: fornecedores,

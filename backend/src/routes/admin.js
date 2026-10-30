@@ -137,6 +137,13 @@ router.get('/diagnostico', async (req, res) => {
     out.banco.rls = rls.rows;
   } catch (err) { out.banco = { ok: false, erro: err.message }; }
   out.ia = ia.estadoIA();
+  try {
+    const cap = await ia.capacidades();
+    out.ia.visao = !!cap.visao;
+    out.ia.modelos_texto = cap.modelos_texto || 0;
+    out.ia.modelos_visao = cap.modelos_visao || 0;
+    out.ia.cota = cap.cota || null;
+  } catch (err) { out.ia.erro_capacidades = err.message; }
   if (req.query.testar_ia === '1') {
     try { out.ia.teste = await ia.testarIA(); } catch (err) { out.ia.teste = { ok: false, erro: err.message }; }
   }
