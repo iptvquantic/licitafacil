@@ -254,7 +254,8 @@ router.post('/:id/catalogo/:cid/estruturar', async (req, res) => {
     res.json(Object.assign({ ok: true }, out));
   } catch (err) {
     if (err.amigavel) return res.status(err.status).json({ error: err.message });
-    if (err.code) return res.status(err.code === 'COTA' ? 429 : 503).json({ error: err.mensagem || indexacao.mensagemErroIA(err), code: err.code });
+    // falha da IA gratuita é esperada: 200 com ok:false (o navegador decide se tenta de novo, sem erro de rede no console)
+    if (err.code) return res.json({ ok: false, error: err.mensagem || indexacao.mensagemErroIA(err), code: err.code });
     console.error('Erro ao estruturar:', err.message);
     res.status(500).json({ error: 'Erro ao organizar com a IA' });
   }

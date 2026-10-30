@@ -36,7 +36,19 @@ function esperarAnimacoes(pg) {
     ['produtos', SITE + '/#fornecedor/' + fid, async () => { await p.waitForSelector('#tbody-produtos tr'); }],
     ['adicionar', SITE + '/#fornecedor/' + fid + '/adicionar', async () => { await p.waitForSelector('#painel-adicionar:not(.hidden)'); }],
     ['config', SITE + '/#config', async () => { await p.waitForSelector('#secao-config:not(.hidden)'); }],
-    ['admin', SITE + '/#admin', async () => { await p.waitForSelector('#adm-usuarios .tabela'); }]
+    ['admin', SITE + '/#admin', async () => { await p.waitForSelector('#adm-usuarios .tabela'); }],
+    ['importar', SITE + '/#importar', async () => { await p.waitForSelector('#imp-capacidades-importar .cap-linha'); }],
+    // conferência de um catálogo lido (PDF já organizado: não gasta IA); um produto desmarcado para checar o contraste da linha riscada
+    ['conferencia', SITE + '/#importar', async () => {
+      await p.setInputFiles('#input-importar', path.join(__dirname, 'arquivos', 'catalogo-flex-fast-prompt-mestre.pdf'));
+      await p.click('#imp-trabalho-importar [data-acao="imp-comecar"]');
+      await p.waitForSelector('#imp-btn-salvar', { timeout: 60000 });
+      await p.locator('#imp-tbody input.imp-sel').first().uncheck();
+    }, false, async () => {
+      await p.click('[data-acao="imp-descartar-confirmar"]');
+      await p.click('#btn-confirmar-ok');
+      await p.waitForSelector('#imp-entrada-importar:not(.hidden)');
+    }]
   ];
   let total = 0;
   const anon = await (await b.newContext({ viewport: { width: 1366, height: 860 }, locale: 'pt-BR' })).newPage();
@@ -58,7 +70,7 @@ function esperarAnimacoes(pg) {
   }
   await anon.evaluate(() => localStorage.setItem('tema', 'dark'));
   for (const tema of TEMAS) {
-    for (const [nome, url, preparar, publica] of telas) {
+    for (const [nome, url, preparar, publica, depois] of telas) {
       if (publica && tema === 'light') continue;
       await p.evaluate(t => localStorage.setItem('tema', t), tema);
       await p.goto(url);
@@ -74,6 +86,7 @@ function esperarAnimacoes(pg) {
       });
       total += r.length;
       console.log((r.length ? '✗ ' : '✓ ') + tema + ' / ' + nome + (r.length ? '\n    ' + r.join('\n    ') : ''));
+      if (depois) await depois();
     }
   }
   await p.evaluate(async (id) => { await fetch(API_URL + '/api/fornecedores/' + id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + localStorage.getItem('lf_token') } }); localStorage.setItem('tema', 'dark'); }, fid);

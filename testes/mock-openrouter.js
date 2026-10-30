@@ -2,10 +2,12 @@
 // - modelos gratuitos com e sem leitura de imagem; um deles responde vazio (raciocínio estourou) e outro dá 429
 // - /key informa a cota diária de modelos gratuitos
 // - leitura de página (imagem) devolve JSON de produtos; texto bruto também; perguntas recebem texto
+// - POST /__reiniciar recomeça a cota (usado no início do teste ponta a ponta)
 const http = require('http');
 const PORTA = parseInt(process.env.PORTA_MOCK || '4010', 10);
 const chamadas = [];
 let usadas = 3;
+let demora = 0; // POST /__demora?ms=N deixa as respostas da IA mais lentas (para ver a tela de progresso)
 
 const MODELOS = [
   { id: 'nvidia/nemotron-3.5-super-vl:free', context_length: 1000000, pricing: { prompt: '0', completion: '0' },
@@ -21,6 +23,21 @@ const MODELOS = [
 ];
 
 // Páginas do catálogo de teste (o navegador envia "Página N de M")
+// Página "densa" (tabela grande): a 1ª resposta vem cortada pelo limite de tokens; a continuação traz o resto
+const DENSOS = ['Duplex 2x10', 'Duplex 2x16', 'Triplex 3x10', 'Triplex 3x16', 'Quadruplex 4x10', 'Quadruplex 4x16'].map(function (f) {
+  const bitola = f.split(' ')[1] + ' mm²';
+  return { nome: 'Cabo Multiplexado ' + f.split(' ')[0] + ' ' + bitola, bitola: bitola, tensao: '0,6/1 kV', material: 'alumínio', norma: 'ABNT NBR 8182' };
+});
+function respostaDensa(texto) {
+  if (/cortada no produto/.test(texto)) {
+    // repete o último já lido (o sistema tira repetidos) e traz os que faltavam
+    return { content: JSON.stringify({ produtos: DENSOS.slice(3), resumo_pagina: 'Fim da tabela de multiplexados.' }), fim: 'stop' };
+  }
+  const completo = JSON.stringify({ fornecedor: { nome: 'Energy Fios e Cabos' }, produtos: DENSOS, resumo_pagina: 'Tabela de multiplexados.' });
+  const corte = completo.indexOf(DENSOS[4].nome) + 6; // corta no meio do 5º produto
+  return { content: completo.slice(0, corte), fim: 'length' };
+}
+
 function paginaJSON(n) {
   if (n === 1) {
     return { fornecedor: { nome: 'Energy Fios e Cabos', site: 'www.energycondutores.com.br', especialidade: 'Fios e cabos elétricos de cobre para baixa tensão' },
@@ -57,6 +74,9 @@ http.createServer((req, res) => {
   req.on('data', c => body += c);
   req.on('end', () => {
     res.setHeader('Content-Type', 'application/json');
+    // os testes recomeçam a cota do dia (o mock pode ficar ligado entre uma rodada e outra)
+    if (req.url === '/__reiniciar') { usadas = 3; demora = 0; chamadas.length = 0; return res.end('{"ok":true}'); }
+    if (req.url.indexOf('/__demora') === 0) { demora = parseInt(new URL(req.url, 'http://mock').searchParams.get('ms') || '0', 10) || 0; return res.end('{"ok":true}'); }
     if (req.url.endsWith('/models')) return res.end(JSON.stringify({ data: MODELOS }));
     if (req.url.endsWith('/key')) {
       if (req.headers.authorization !== 'Bearer chave-teste') { res.statusCode = 401; return res.end('{"error":"bad key"}'); }
@@ -78,7 +98,17 @@ http.createServer((req, res) => {
     const temImagem = partes.some(p => p.type === 'image_url');
     const texto = partes.filter(p => p.type === 'text').map(p => p.text).join('\n');
     let content;
-    if (temImagem) {
+    // catálogo "eletrica-sul": a leitura por imagem falha de propósito → o navegador cai para o texto + IA de texto
+    if (temImagem && /eletrica-sul/i.test(texto)) {
+      res.statusCode = 502;
+      return res.end('{"error":{"message":"Provider returned error","code":502}}');
+    }
+    let fim = 'stop';
+    if (temImagem && /dens[ao]/i.test(texto)) {
+      const d = respostaDensa(texto);
+      content = d.content;
+      fim = d.fim;
+    } else if (temImagem) {
       const n = parseInt((texto.match(/P[aá]gina (\d+)/) || [0, 1])[1], 10);
       content = '```json\n' + JSON.stringify(paginaJSON(n)) + '\n```';
     } else if (/extrai dados de cat/.test(sistema)) {
@@ -89,7 +119,8 @@ http.createServer((req, res) => {
     } else {
       content = 'O fornecedor Flex Fast tem o Cabo PP 3x2,5mm² (PP-325) por R$ 8,90/metro. Contato: WhatsApp (11) 95780-8642.';
     }
-    res.end(JSON.stringify({ choices: [{ message: { content }, finish_reason: 'stop' }], usage: { total_tokens: 10 } }));
+    const corpo = JSON.stringify({ choices: [{ message: { content }, finish_reason: fim }], usage: { total_tokens: 10 } });
+    if (demora) setTimeout(function () { res.end(corpo); }, demora); else res.end(corpo);
   });
 }).listen(PORTA, () => console.log('mock OpenRouter na porta ' + PORTA));
 process.on('SIGTERM', () => { console.log('chamadas:', chamadas.join(', ')); process.exit(0); });

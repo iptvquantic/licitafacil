@@ -1,6 +1,6 @@
 {
   "name": "licitafacil-api",
-  "version": "3.1.1",
+  "version": "3.2.0",
   "description": "LicitaFácil API - SaaS de Gestão de Fornecedores com IA",
   "main": "src/server.js",
   "scripts": {

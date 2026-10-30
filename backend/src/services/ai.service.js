@@ -93,7 +93,9 @@ async function candidatos(tarefa, max, evitar) {
   const unicos = lista.filter(function (id, i) { return lista.indexOf(id) === i && evitar.indexOf(id) < 0; });
   const agora = Date.now();
   const livres = unicos.filter(function (id) { return !(estado.pausa[id] > agora); });
-  return (livres.length ? livres : unicos).slice(0, max || 4);
+  // primeiro os modelos sem pausa; os pausados (erro recente) ficam no fim como última chance
+  const pausados = unicos.filter(function (id) { return livres.indexOf(id) < 0; });
+  return livres.concat(pausados).slice(0, max || 4);
 }
 
 function pausar(modelo, minutos) { estado.pausa[modelo] = Date.now() + minutos * 60000; }
@@ -189,7 +191,9 @@ async function chamarIA(mensagens, opcoes) {
       estado.bom[tarefa] = modelo;
       estado.ultimoSucesso = new Date().toISOString();
       if (estado.cota && estado.cota.restante > 0) estado.cota.restante--;
-      return { texto: texto, valor: valor, modelo: modelo, ms: Date.now() - inicio, tentados: tentados };
+      // motivo "length" = a resposta foi cortada pelo limite de tokens (página com muitos produtos)
+      const motivoFim = j && j.choices && j.choices[0] && j.choices[0].finish_reason;
+      return { texto: texto, valor: valor, modelo: modelo, ms: Date.now() - inicio, tentados: tentados, motivo: motivoFim || null };
     } catch (err) {
       if (err.code === 'CHAVE' || err.code === 'COTA') throw err;
       ultimo = modelo + ': ' + (err.name === 'TimeoutError' ? 'tempo esgotado' : err.message);
@@ -352,10 +356,10 @@ const REGRAS = [
   '2. "nome": nome completo do produto + a variação da linha. Ex.: "Cabo Flexível 750V 2,5 mm²", "Disjuntor DIN Curva C 20A", "Luva Isolante Classe 2 Tam. 10".',
   '3. Informações que valem para a tabela ou família inteira (tensão, temperatura, norma, material, isolação, cobertura, aplicação, marca) vão em TODOS os produtos dela.',
   '4. Colunas sem campo próprio (diâmetro externo, espessura, peso, embalagem, cores disponíveis, corrente, resistência, código de cor etc.) vão em "atributos", com o nome da coluna e a unidade. Ex.: {"Diâmetro externo (mm)":"3,4","Peso (kg/100 m)":"3,1","Embalagem":"rolo 100 m","Cores":"preto, azul, verde"}.',
-  '5. Copie números, medidas, códigos, normas e preços EXATAMENTE como impressos (vírgula decimal, mm², kV, NBR). Nunca invente; campo sem informação fica "".',
+  '5. Copie números, medidas, códigos, normas e preços EXATAMENTE como impressos (vírgula decimal, mm², kV, NBR). Nunca invente. OMITA os campos sem informação (não escreva campos vazios): a resposta fica menor e cabem mais produtos.',
   '6. "fornecedor": só o que estiver escrito (nome/logo da empresa, CNPJ, telefones, WhatsApp, e-mail, site, endereço) e, em "especialidade", 1 frase do que a empresa vende.',
   '7. Sem produtos (capa, apresentação, índice): "produtos": [] e "resumo_pagina" com 1 frase.',
-  '8. Não repita produtos. Responda SOMENTE o JSON, sem markdown e sem comentários.'
+  '8. Não repita produtos. Siga a ordem em que aparecem na página. Responda SOMENTE o JSON, sem markdown e sem comentários.'
 ].join('\n');
 
 const PROMPT_VISAO = 'Você extrai dados de catálogos técnicos de fornecedores brasileiros (materiais elétricos, fios e cabos, EPI, ferramentas, hidráulica, construção, informática e outros). ' +
@@ -378,6 +382,11 @@ async function extrairPagina(opcoes) {
   let instrucao = 'Página ' + (opcoes.pagina || 1) + (opcoes.total ? ' de ' + opcoes.total : '') + ' do catálogo' +
     (opcoes.nomeArquivo ? ' "' + String(opcoes.nomeArquivo).slice(0, 120) + '"' : '') + '.';
   if (opcoes.contexto) instrucao += '\nContexto da página anterior (família/tabela que pode continuar nesta página): ' + String(opcoes.contexto).slice(0, 400);
+  const continuar = String(opcoes.continuarApos || '').trim().slice(0, 200);
+  if (continuar) {
+    instrucao += '\n\nATENÇÃO: esta página já foi lida em parte e a lista anterior foi cortada no produto "' + continuar + '". ' +
+      'Liste SOMENTE os produtos que aparecem DEPOIS dele nesta página, na ordem da página (não repita os anteriores).';
+  }
   const textoPagina = String(opcoes.texto || '').trim();
   if (textoPagina) instrucao += '\n\nTexto já lido desta página (use para conferir códigos e números):\n' + textoPagina.slice(0, 12000);
   partes.push({ type: 'text', text: instrucao });
@@ -386,7 +395,17 @@ async function extrairPagina(opcoes) {
     tarefa: 'visao', json: true, maxTokens: 8192, temperatura: 0, validar: validarExtracao,
     timeoutMs: NA_VERCEL ? 48000 : 120000, prazoMs: NA_VERCEL ? 54000 : 180000, tentativas: 3, evitar: opcoes.evitar
   });
-  return Object.assign({ modelo: r.modelo, ms: r.ms }, r.valor);
+  const v = r.valor || {};
+  const produtos = v.produtos || [];
+  if (r.motivo === 'length' && !produtos.length) {
+    // cortada antes do primeiro produto: não dá para continuar; o navegador tenta de novo com outro modelo
+    const e = erroIA('IA indisponível: ' + r.modelo + ' cortou a resposta antes do primeiro produto', 'INDISPONIVEL');
+    e.tentados = [r.modelo];
+    throw e;
+  }
+  // resposta cortada pelo limite de tokens: o navegador pede o resto da página a partir do último produto lido
+  const incompleto = r.motivo === 'length' && produtos.length > 0;
+  return Object.assign({ modelo: r.modelo, ms: r.ms, incompleto: incompleto, ultimo: incompleto ? produtos[produtos.length - 1].nome : '' }, v);
 }
 
 // Um bloco de texto do catálogo → { fornecedor, produtos, resumo, modelo }

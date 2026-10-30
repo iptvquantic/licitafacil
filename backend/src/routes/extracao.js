@@ -30,15 +30,15 @@ const limiteLeituraIA = rateLimit({
   message: { error: 'Muitas leituras com IA em pouco tempo. Aguarde alguns minutos.' }
 });
 
+// Falha da IA gratuita (cota do dia, modelo ocupado ou sem resposta) é esperada: responde 200 com ok:false e o motivo,
+// e o navegador decide (tenta outro modelo, lê sem IA ou para). Assim o console do navegador não acusa erro de rede.
 function respostaErroIA(res, err) {
   if (err && err.amigavel) return res.status(err.status).json({ error: err.message });
-  if (err && err.code) {
-    const status = err.code === 'COTA' ? 429 : (err.code === 'SEM_CHAVE' ? 503 : 502);
-    return res.status(status).json({ error: indexacao.mensagemErroIA(err), code: err.code, tentados: err.tentados || [] });
-  }
+  if (err && err.code) return res.json({ ok: false, error: indexacao.mensagemErroIA(err), code: err.code, tentados: err.tentados || [] });
   console.error('Erro na leitura com IA:', err && err.message);
   return res.status(500).json({ error: 'Não foi possível ler esta parte agora.' });
 }
+const SEM_IA = { ok: false, error: 'A IA não está configurada no servidor.', code: 'SEM_CHAVE', tentados: [] };
 
 // GET /api/extracao/capacidades — o que a leitura pode usar agora (IA de imagem, cota do dia)
 router.get('/capacidades', async (req, res) => {
@@ -49,8 +49,9 @@ router.get('/capacidades', async (req, res) => {
   }
 });
 
-// POST /api/extracao/pagina  { imagem: data:image/jpeg;base64,…, texto, pagina, total, contexto, nome_arquivo, evitar[] }
-// Lê UMA página com a IA de imagem e devolve os produtos (nada é gravado aqui)
+// POST /api/extracao/pagina  { imagem: data:image/jpeg;base64,…, texto, pagina, total, contexto, nome_arquivo, evitar[], continuar_apos }
+// Lê UMA página com a IA de imagem e devolve os produtos (nada é gravado aqui).
+// incompleto:true = a resposta foi cortada (página com muitos produtos): o navegador pede o resto com continuar_apos = ultimo
 router.post('/pagina', limiteLeituraIA, async (req, res) => {
   try {
     const imagem = String(req.body.imagem || '');
@@ -58,14 +59,16 @@ router.post('/pagina', limiteLeituraIA, async (req, res) => {
       return res.status(400).json({ error: 'Imagem da página inválida.' });
     }
     if (imagem.length > 4200000) return res.status(413).json({ error: 'Imagem da página grande demais.' });
-    if (!ia.configurada()) return res.status(503).json({ error: 'A IA não está configurada no servidor.', code: 'SEM_CHAVE' });
+    if (!ia.configurada()) return res.json(SEM_IA);
     const evitar = Array.isArray(req.body.evitar) ? req.body.evitar.slice(0, 10).map(String) : [];
     const r = await ia.extrairPagina({
       imagem: imagem, texto: String(req.body.texto || '').slice(0, 20000), pagina: parseInt(req.body.pagina, 10) || 1,
       total: parseInt(req.body.total, 10) || 0, contexto: String(req.body.contexto || '').slice(0, 500),
-      nomeArquivo: String(req.body.nome_arquivo || '').slice(0, 200), evitar: evitar
+      nomeArquivo: String(req.body.nome_arquivo || '').slice(0, 200), evitar: evitar,
+      continuarApos: String(req.body.continuar_apos || '').slice(0, 200)
     });
-    res.json({ ok: true, produtos: r.produtos, fornecedor: r.fornecedor, resumo: r.resumo, modelo: r.modelo, ms: r.ms });
+    res.json({ ok: true, produtos: r.produtos, fornecedor: r.fornecedor, resumo: r.resumo, modelo: r.modelo, ms: r.ms,
+      incompleto: !!r.incompleto, ultimo: r.ultimo || '' });
   } catch (err) { respostaErroIA(res, err); }
 });
 
@@ -91,7 +94,7 @@ router.post('/estruturar-bloco', limiteLeituraIA, async (req, res) => {
   try {
     const texto = String(req.body.texto || '');
     if (texto.replace(/\s/g, '').length < 30) return res.status(400).json({ error: 'Texto curto demais.' });
-    if (!ia.configurada()) return res.status(503).json({ error: 'A IA não está configurada no servidor.', code: 'SEM_CHAVE' });
+    if (!ia.configurada()) return res.json(SEM_IA);
     const r = await ia.estruturarTexto(texto.slice(0, 16000), { contexto: String(req.body.contexto || '').slice(0, 300),
       evitar: Array.isArray(req.body.evitar) ? req.body.evitar.slice(0, 10).map(String) : [] });
     res.json({ ok: true, produtos: r.produtos, fornecedor: r.fornecedor, resumo: r.resumo, modelo: r.modelo, ms: r.ms });

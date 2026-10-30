@@ -12,3 +12,4 @@ tmp/
 
 # arquivos gerados pelos testes (npm run arquivos)
 testes/arquivos/
+testes/telas/

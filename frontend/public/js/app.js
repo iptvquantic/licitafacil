@@ -135,6 +135,26 @@ function vazio() { return '<span class="text-muted" title="não informado">—</
 function inicial(nome) { var s = String(nome || '').trim(); return s ? s.charAt(0).toUpperCase() : '?'; }
 function ehMobile() { return window.matchMedia && window.matchMedia('(max-width: 768px)').matches; }
 
+// CNPJ: 14 números com os 2 dígitos verificadores certos (mesma conta do servidor)
+function cnpjValido(c) {
+  c = String(c || '').replace(/\D/g, '');
+  if (c.length !== 14 || /^(\d)\1{13}$/.test(c)) return false;
+  function dv(base) {
+    var pesos = base.length === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    var soma = 0;
+    for (var i = 0; i < pesos.length; i++) soma += parseInt(base.charAt(i), 10) * pesos[i];
+    var r = soma % 11;
+    return r < 2 ? 0 : 11 - r;
+  }
+  var d1 = dv(c.slice(0, 12));
+  var d2 = dv(c.slice(0, 12) + d1);
+  return c.charAt(12) === String(d1) && c.charAt(13) === String(d2);
+}
+function msgCNPJ(c) {
+  var n = String(c || '').replace(/\D/g, '').length;
+  return n !== 14 ? 'Confira o CNPJ: são 14 números.' : 'Confira o CNPJ: os dígitos verificadores não batem.';
+}
+
 function semAcento(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, ''); }
 function normalizar(s) {
   return semAcento(s).toLowerCase().replace(/[×✕]/g, 'x').replace(/²/g, '2').replace(/(\d),(\d)/g, '$1.$2').replace(/\s+/g, ' ').trim();
@@ -692,7 +712,7 @@ function salvarFornecedor(e) {
   if (!dados.nome) return falhar('Informe o nome do fornecedor.', 'forn-nome');
   if (dados.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(dados.email)) return falhar('Confira o e-mail: ele parece incompleto.', 'forn-email');
   if (dados.whatsapp && dados.whatsapp.replace(/\D/g, '').length < 10) return falhar('Informe o WhatsApp com DDD. Ex.: (11) 99999-9999', 'forn-whatsapp');
-  if (dados.cnpj && dados.cnpj.replace(/\D/g, '').length !== 14) return falhar('Confira o CNPJ: são 14 números.', 'forn-cnpj');
+  if (dados.cnpj && !cnpjValido(dados.cnpj)) return falhar(msgCNPJ(dados.cnpj), 'forn-cnpj');
   mostrar(erroEl, false);
   var btn = $('btn-salvar-fornecedor');
   setLoading(btn, true, 'Salvando…');
@@ -1046,6 +1066,8 @@ function organizarComIA(cid) {
   function proxima() {
     if (org.parar || org.parte >= org.total) return Promise.resolve();
     return apiPost(base, { parte: org.parte, contexto: contexto }, { timeout: 80000 }).then(function (r) {
+      // a API responde ok:false quando a IA gratuita falha (cota, modelo ocupado)
+      if (r && r.ok === false) throw { error: r.error, code: r.code, status: r.code === 'COTA' ? 429 : 502 };
       org.produtos = r.total_produtos;
       org.parte = r.parte + 1;
       org.falhasSeguidas = 0;
@@ -1126,6 +1148,12 @@ var CAMPOS_FORN_IMP = [['nome', 'Nome do fornecedor *'], ['cnpj', 'CNPJ'], ['tel
   ['email', 'E-mail'], ['site', 'Site'], ['endereco', 'Endereço'], ['especialidade', 'Especialidade']];
 var MAPA_FORN_EXISTENTE = { telefone: 'telefone', whatsapp: 'whatsapp', email: 'email', cnpj: 'cnpj', site: 'site', endereco: 'endereco', especialidade: 'observacoes' };
 
+// A leitura continua mesmo se a pessoa mudar de tela; só desenha quando a tela dela está aberta
+function importacaoVisivel(imp) {
+  if (!imp || ESTADO.importacao !== imp) return false;
+  if (imp.ctx.tela === 'importar') return ESTADO.secao === 'importar';
+  return ESTADO.secao === 'detalhe' && String(ESTADO.fornecedorId) === String(imp.fornecedorId) && ESTADO.aba === 'adicionar';
+}
 function contextoImportacao(tela) {
   return tela === 'fornecedor'
     ? { tela: 'fornecedor', entrada: 'imp-entrada-fornecedor', trabalho: 'imp-trabalho-fornecedor', capacidades: 'imp-capacidades-fornecedor' }
@@ -1159,6 +1187,8 @@ function mostrarImportacao(tela) {
   var ctx = contextoImportacao(tela);
   var imp = ESTADO.importacao;
   renderCapacidades(tela);
+  // leitura já salva: ao voltar para a tela, começa limpa (e não bloqueia a outra tela)
+  if (imp && imp.fase === 'concluido') { descartarImportacao(true); imp = null; }
   if (!imp) { mostrar(ctx.entrada, true); html(ctx.trabalho, ''); return; }
   var mesma = imp.ctx.tela === tela && (tela !== 'fornecedor' || imp.fornecedorId === ESTADO.fornecedorId);
   if (!mesma) {
@@ -1193,6 +1223,7 @@ function iniciarImportacao(arquivos, tela) {
   if (tela === 'fornecedor' && !ESTADO.fornecedorId) return;
   var imp = {
     ctx: ctx, fornecedorId: tela === 'fornecedor' ? ESTADO.fornecedorId : null, arquivos: lista, fase: 'abrindo',
+    fornecedor: tela === 'fornecedor' ? ESTADO.fornecedor : null,
     nomeArquivo: lista.length === 1 ? lista[0].name : lista.length + ' fotos', excluidos: {}, filtro: '', limite: IMP_LIMITE_TABELA, modoForn: null
   };
   ESTADO.importacao = imp;
@@ -1206,13 +1237,17 @@ function iniciarImportacao(arquivos, tela) {
     renderPreparacao(imp);
   }).catch(function (err) {
     if (ESTADO.importacao !== imp) return;
+    var visivel = importacaoVisivel(imp);
     ESTADO.importacao = null;
+    var msg = msgErro(err, 'Não consegui abrir este arquivo.');
+    if (!visivel) { showToast(msg, 'error', 7000); return; }
     mostrar(ctx.entrada, true);
-    html(ctx.trabalho, erroLeituraHTML(msgErro(err, 'Não consegui abrir este arquivo.')));
+    html(ctx.trabalho, erroLeituraHTML(msg));
   });
 }
 
 function renderPreparacao(imp) {
+  if (!importacaoVisivel(imp)) return;
   var n = imp.doc.paginas;
   var c = imp.cap || {};
   var resta = restanteIA(c);
@@ -1261,22 +1296,31 @@ function comecarLeitura() {
   }).then(function () {
     if (ESTADO.importacao !== imp || !imp.resultado) return;
     imp.fase = 'revisar';
-    renderRevisao(imp);
-    showToast('Leitura concluída: confira os produtos e salve.', 'success', 5000);
+    if (importacaoVisivel(imp)) {
+      renderRevisao(imp);
+      showToast('Leitura concluída: confira os produtos e salve.', 'success', 5000);
+    } else {
+      showToast('Leitura de “' + imp.nomeArquivo + '” concluída. Volte em ' + (imp.ctx.tela === 'importar' ? 'Importar catálogo' : 'Adicionar catálogo do fornecedor') +
+        ' para conferir e salvar.', 'success', 9000);
+    }
   }).catch(function (err) {
     if (ESTADO.importacao !== imp) return;
     if (err && err.code === 'CANCELADO') { descartarImportacao(true); showToast('Leitura cancelada.', 'info'); return; }
     imp.fase = 'preparar';
+    var msg = msgErro(err, 'A leitura parou no meio. Tente de novo.');
+    if (!importacaoVisivel(imp)) { showToast(msg, 'error', 7000); return; }
     renderPreparacao(imp);
-    html(imp.ctx.trabalho, $(imp.ctx.trabalho).innerHTML + erroLeituraHTML(msgErro(err, 'A leitura parou no meio. Tente de novo.')));
+    html(imp.ctx.trabalho, $(imp.ctx.trabalho).innerHTML + erroLeituraHTML(msg));
   });
 }
 
-var NOMES_METODO = { ia_visao: 'lida pela IA', ia_texto: 'texto organizado pela IA', pdf_texto: 'texto do PDF', ocr: 'OCR' };
+var NOMES_METODO = { ia_visao: 'lida pela IA', ia_texto: 'texto organizado pela IA', pdf_texto: 'texto do PDF', ocr: 'OCR', estruturado: 'texto já organizado' };
+var NOMES_FORMATO_PRONTO = { prompt_mestre: 'no formato do Prompt Mestre', json: 'em JSON', tabela: 'em tabela' };
 function classeChip(p) {
   if (!p) return 'pg-espera';
   if (p.estado === 'lendo') return 'pg-lendo';
   if (p.estado === 'erro') return 'pg-erro';
+  if (p.parcial) return 'pg-semia';
   if (p.produtos && p.produtos.length) return 'pg-ok';
   if (p.metodo === 'ia_texto') return 'pg-ok';
   if (p.estado === 'sem_ia') return 'pg-semia';
@@ -1288,7 +1332,7 @@ function tituloChip(p, n) {
   if (p.estado === 'erro') return 'Página ' + n + ': erro — ' + (p.erro || '');
   var q = (p.produtos || []).length;
   return 'Página ' + n + ': ' + (q ? q + ' ' + plural(q, 'produto', 'produtos') : 'sem produtos') + (p.metodo ? ' (' + (NOMES_METODO[p.metodo] || p.metodo) + ')' : '') +
-    (p.erroIA ? ' — ' + p.erroIA : '');
+    (p.parcial ? ' — pode ter ficado incompleta' : '') + (p.erroIA ? ' — ' + p.erroIA : '');
 }
 function htmlChips(imp) {
   var est = imp.sessao ? imp.sessao.estado.paginas : {};
@@ -1298,6 +1342,7 @@ function htmlChips(imp) {
   }).join('');
 }
 function renderProgresso(imp) {
+  if (!importacaoVisivel(imp)) return;
   var r = imp.sessao.resumo();
   var pct = r.total ? Math.round((r.feitas / r.total) * 100) : 0;
   html(imp.ctx.trabalho, '<div class="card imp-card">' +
@@ -1346,9 +1391,16 @@ function aoEventoImportacao(imp, ev) {
   } else if (ev.tipo === 'ocr' && status) {
     status.textContent = 'Página ' + ev.pagina + ': lendo com OCR… ' + (ev.pct || 0) + '%';
   } else if (ev.tipo === 'ia' && status) {
-    status.textContent = 'Página ' + ev.pagina + ': a IA está lendo a imagem' + (ev.tentativa > 1 ? ' (tentativa ' + ev.tentativa + ')' : '') + '…';
+    status.textContent = 'Página ' + ev.pagina + ': ' + (ev.continuacao ? 'a IA está lendo o restante da tabela' : 'a IA está lendo a imagem') +
+      (ev.tentativa > 1 ? ' (tentativa ' + ev.tentativa + ')' : '') + '…';
+  } else if (ev.tipo === 'continua' && status) {
+    status.textContent = 'Página ' + ev.pagina + ': muitos produtos (' + numero(ev.produtos) + ' até agora), lendo o restante…';
   } else if (ev.tipo === 'texto_ia' && status) {
     status.textContent = 'A IA está organizando o texto das páginas: parte ' + ev.bloco + ' de ' + ev.total + '…';
+  } else if (ev.tipo === 'analise' && status) {
+    status.textContent = 'Conferindo se o PDF já está organizado…';
+  } else if (ev.tipo === 'organizado' && status) {
+    status.textContent = 'O PDF já está ' + (NOMES_FORMATO_PRONTO[ev.formato] || 'organizado') + ': li sem gastar a IA.';
   }
 }
 
@@ -1382,19 +1434,24 @@ function resumoAtributos(p) {
 }
 function htmlLinhasRevisao(imp) {
   var lista = produtosRevisao(imp);
-  if (!lista.length) return '<tr><td colspan="7"><p class="text-muted" style="padding:12px">Nenhum produto com esse filtro.</p></td></tr>';
+  if (!lista.length) return '<tr><td colspan="7" class="imp-sem-resultado"><p class="text-muted" style="padding:12px">Nenhum produto com esse filtro.</p></td></tr>';
+  // data-rot: no celular a linha vira cartão e cada célula mostra o rótulo
+  function celula(rotulo, conteudo, classe) {
+    var classes = [classe || '', conteudo ? '' : 'vazia'].join(' ').trim();
+    return '<td data-rot="' + rotulo + '"' + (classes ? ' class="' + classes + '"' : '') + '>' + (conteudo || vazio()) + '</td>';
+  }
   return lista.slice(0, imp.limite).map(function (p) {
     var fora = !!imp.excluidos[p._chave];
     var extra = resumoAtributos(p);
     return '<tr class="' + (fora ? 'imp-excluido' : '') + '">' +
       '<td class="centro"><input type="checkbox" class="imp-sel" data-chave="' + esc(p._chave) + '"' + (fora ? '' : ' checked') + ' aria-label="Salvar ' + esc(p.nome) + '"></td>' +
-      '<td><div class="prod-nome">' + esc(p.nome) + '</div>' + (p.codigo ? '<span class="cod">' + esc(p.codigo) + '</span>' : '') +
+      '<td class="imp-prod"><div class="prod-nome">' + esc(p.nome) + '</div>' + (p.codigo ? '<span class="cod">' + esc(p.codigo) + '</span>' : '') +
         (p.categoria ? '<div class="cell-sub">' + esc(p.categoria) + '</div>' : '') + (extra ? '<div class="cell-sub">' + esc(extra) + '</div>' : '') + '</td>' +
-      '<td>' + (p.bitola ? esc(p.bitola) : vazio()) + '</td>' +
-      '<td>' + (p.tensao ? esc(p.tensao) : vazio()) + '</td>' +
-      '<td>' + (p.norma ? '<span class="norma">' + esc(p.norma) + '</span>' : vazio()) + '</td>' +
-      '<td class="num">' + (p.preco ? '<div class="preco">' + esc(p.preco) + '</div>' + (p.unidade ? '<div class="unid">' + esc(p.unidade) + '</div>' : '') : vazio()) + '</td>' +
-      '<td class="centro text-muted">' + esc(p._pagina || '') + '</td></tr>';
+      celula('Medida', p.bitola ? esc(p.bitola) : '') +
+      celula('Tensão', p.tensao ? esc(p.tensao) : '') +
+      celula('Norma', p.norma ? '<span class="norma">' + esc(p.norma) + '</span>' : '') +
+      celula('Preço', p.preco ? '<div class="preco">' + esc(p.preco) + '</div>' + (p.unidade ? '<div class="unid">' + esc(p.unidade) + '</div>' : '') : '', 'num') +
+      celula('Página', p._pagina ? esc(p._pagina) : '', 'centro text-muted') + '</tr>';
   }).join('');
 }
 function atualizarTabelaRevisao(imp) {
@@ -1421,7 +1478,7 @@ function htmlFornecedorRevisao(imp) {
   var det = (imp.deteccao && imp.deteccao.fornecedor) || {};
   var parecidos = (imp.deteccao && imp.deteccao.parecidos) || [];
   if (imp.fornecedorId) {
-    var f = ESTADO.fornecedor || {};
+    var f = imp.fornecedor || ESTADO.fornecedor || {};
     var linhas = Object.keys(MAPA_FORN_EXISTENTE).filter(function (k) { return det[k]; }).map(function (k) {
       var atual = f[MAPA_FORN_EXISTENTE[k]];
       var rot = { telefone: 'Telefone', whatsapp: 'WhatsApp', email: 'E-mail', cnpj: 'CNPJ', site: 'Site', endereco: 'Endereço', especialidade: 'Especialidade' }[k];
@@ -1459,22 +1516,39 @@ function htmlFornecedorRevisao(imp) {
     '<p class="form-hint mt-2">Confira os dados: a IA copia do catálogo, mas vale uma olhada no CNPJ e nos telefones.</p>';
 }
 
+// Páginas que valem uma nova leitura: erro, lidas sem a IA (com a IA ligada) ou cortadas por terem produtos demais
+function paginasComProblema(imp) {
+  return imp.resultado.paginas.filter(function (p) {
+    return p.estado === 'erro' || p.parcial || (imp.usarIA && p.estado === 'sem_ia' && p.metodo !== 'ia_texto');
+  });
+}
+function listaPaginas(lista) {
+  return lista.slice(0, 12).map(function (p) { return p.n; }).join(', ') + (lista.length > 12 ? '…' : '');
+}
 function renderRevisao(imp) {
+  if (!importacaoVisivel(imp)) return;
   var res = imp.resultado;
   var r = res.resumo;
   var paginas = res.paginas;
-  var problemas = paginas.filter(function (p) { return p.estado === 'erro' || (imp.usarIA && p.estado === 'sem_ia' && p.metodo !== 'ia_texto'); }).map(function (p) { return p.n; });
+  var problemas = paginasComProblema(imp);
+  var naoLidas = problemas.filter(function (p) { return !p.parcial; });
+  var parciais = problemas.filter(function (p) { return p.parcial; });
   var podeReler = problemas.length && imp.usarIA && imp.doc && !(imp.sessao && imp.sessao.estado.cotaAcabou);
+  var avisos = [];
+  if (naoLidas.length) avisos.push(numero(naoLidas.length) + ' ' + plural(naoLidas.length, 'página não foi lida', 'páginas não foram lidas') + ' pela IA (' + listaPaginas(naoLidas) + ').');
+  if (parciais.length) avisos.push(numero(parciais.length) + ' ' + plural(parciais.length, 'página tinha', 'páginas tinham') + ' produtos demais e ' +
+    plural(parciais.length, 'pode ter ficado incompleta', 'podem ter ficado incompletas') + ' (' + listaPaginas(parciais) + ').');
   var nProd = res.produtos.length;
   html(imp.ctx.trabalho,
     '<div class="card imp-card fade-in">' +
       '<div class="imp-topo"><div><h3 class="card-title">Confira antes de salvar</h3>' +
         '<p class="mt-1">Encontrei <strong>' + numero(nProd) + ' ' + plural(nProd, 'produto', 'produtos') + '</strong> em ' + numero(paginas.length) + ' ' +
-        plural(paginas.length, 'página', 'páginas') + ' de “' + esc(imp.nomeArquivo) + '”' + (r.comIA ? ' · ' + numero(r.comIA) + ' lidas pela IA' : '') + '.</p></div></div>' +
+        plural(paginas.length, 'página', 'páginas') + ' de “' + esc(imp.nomeArquivo) + '”' + (r.comIA ? ' · ' + numero(r.comIA) + ' lidas pela IA' : '') + '.</p>' +
+        (res.formato ? '<p class="text-sm mt-1">' + ICONES.ok.replace('<svg ', '<svg width="14" height="14" style="display:inline;vertical-align:-2px;margin-right:4px" ') +
+          'O PDF já estava ' + esc(NOMES_FORMATO_PRONTO[res.formato] || 'organizado') + ': li o texto direto, sem gastar a cota de IA.</p>' : '') + '</div></div>' +
       '<div class="imp-paginas mt-3" role="list" aria-label="Situação de cada página">' + htmlChips(imp) + '</div>' +
       (res.cotaAcabou ? '<div class="banner alerta mt-3"><span>A cota gratuita de IA de hoje acabou durante a leitura: algumas páginas foram lidas sem IA. Amanhã você pode importar essas páginas de novo, com o mesmo arquivo.</span></div>' : '') +
-      (problemas.length ? '<div class="banner ' + (podeReler ? 'info' : 'alerta') + ' mt-3"><span>' + numero(problemas.length) + ' ' + plural(problemas.length, 'página não foi lida', 'páginas não foram lidas') +
-        ' pela IA (' + problemas.slice(0, 12).join(', ') + (problemas.length > 12 ? '…' : '') + ').</span>' +
+      (problemas.length ? '<div class="banner ' + (podeReler ? 'info' : 'alerta') + ' mt-3"><span>' + esc(avisos.join(' ')) + '</span>' +
         (podeReler ? '<div class="acoes"><button type="button" class="btn btn-secondary btn-sm" data-acao="imp-reler">' + ICONES.reler + 'Ler essas páginas de novo</button></div>' : '') + '</div>' : '') +
       (!nProd ? '<div class="banner alerta mt-3"><span>Nenhum produto foi organizado. Se salvar, o texto lido entra na busca e você pode usar “Organizar com IA” depois.</span></div>' : '') +
     '</div>' +
@@ -1502,7 +1576,8 @@ function salvarImportacao(botao) {
     texto: res.texto.slice(0, MAX_TEXTO),
     resumos: res.resumos.slice(0, 500),
     fornecedor: imp.deteccao ? imp.deteccao.fornecedor : null,
-    info_ia: res.modelos.length ? 'Lido pela IA (' + res.modelos.slice(0, 3).join(', ') + ')' : ''
+    info_ia: res.modelos.length ? 'Lido pela IA (' + res.modelos.slice(0, 3).join(', ') + ')' : '',
+    formato: res.formato || null
   };
   if (imp.fornecedorId) {
     corpo.fornecedor_id = imp.fornecedorId;
@@ -1519,7 +1594,7 @@ function salvarImportacao(botao) {
       var novo = {};
       CAMPOS_FORN_IMP.forEach(function (c) { novo[c[0]] = lerCampoForn(c[0]); });
       if (!novo.nome) { showToast('Informe o nome do fornecedor.', 'warning'); $('imp-f-nome').focus(); return; }
-      if (novo.cnpj && novo.cnpj.replace(/\D/g, '').length !== 14) { showToast('Confira o CNPJ: são 14 números.', 'warning'); $('imp-f-cnpj').focus(); return; }
+      if (novo.cnpj && !cnpjValido(novo.cnpj)) { showToast(msgCNPJ(novo.cnpj), 'warning'); $('imp-f-cnpj').focus(); return; }
       corpo.novo_fornecedor = novo;
     }
   }
@@ -1567,8 +1642,9 @@ function salvarImportacao(botao) {
 }
 
 function renderConcluido(imp) {
+  if (!importacaoVisivel(imp)) return;
   var r = imp.salvo || {};
-  var nome = imp.fornecedorId ? (ESTADO.fornecedor ? ESTADO.fornecedor.nome : 'o fornecedor')
+  var nome = imp.fornecedorId ? (imp.fornecedor ? imp.fornecedor.nome : 'o fornecedor')
     : (r.fornecedor_criado ? lerNomeSalvo(imp) : 'o fornecedor escolhido');
   html(imp.ctx.trabalho, '<div class="resultado-ok imp-card fade-in" role="status">' +
     '<h3 class="card-title">' + ICONES.ok.replace('<svg ', '<svg width="20" height="20" style="display:inline;vertical-align:-4px;margin-right:6px" ') +
@@ -1608,7 +1684,7 @@ function descartarImportacao(silencioso) {
 function relerPaginasImportacao(botao) {
   var imp = ESTADO.importacao;
   if (!imp || imp.fase !== 'revisar' || !imp.sessao) return;
-  var lista = imp.resultado.paginas.filter(function (p) { return p.estado === 'erro' || (p.estado === 'sem_ia' && p.metodo !== 'ia_texto'); }).map(function (p) { return p.n; });
+  var lista = paginasComProblema(imp).map(function (p) { return p.n; });
   if (!lista.length) return;
   setLoading(botao, true, 'Lendo…');
   imp.fase = 'lendo';

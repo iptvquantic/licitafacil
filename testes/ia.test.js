@@ -45,12 +45,38 @@ const IMG = 'data:image/jpeg;base64,' + Buffer.from('ffd8ffe000104a4649460001010
   check(r.s === 400, 'imagem inválida = 400', r);
   r = await api('POST', '/api/extracao/pagina', { imagem: IMG, pagina: 1 });
   check(r.s === 401, 'leitura exige login', r.s);
+  // página com produtos demais: a resposta vem cortada; a continuação traz o resto
+  r = await api('POST', '/api/extracao/pagina', { imagem: IMG, pagina: 1, total: 1, nome_arquivo: 'catalogo-denso.pdf' }, A);
+  check(r.s === 200 && r.j.ok === true && r.j.incompleto === true && r.j.produtos.length === 4 && r.j.ultimo === 'Cabo Multiplexado Triplex 3x16 mm²',
+    'resposta cortada: 4 produtos e aviso de incompleta', r.j && { incompleto: r.j.incompleto, n: r.j.produtos && r.j.produtos.length, ultimo: r.j.ultimo });
+  r = await api('POST', '/api/extracao/pagina', { imagem: IMG, pagina: 1, total: 1, nome_arquivo: 'catalogo-denso.pdf', continuar_apos: 'Cabo Multiplexado Triplex 3x16 mm²' }, A);
+  check(r.s === 200 && r.j.incompleto === false && r.j.produtos.some(function (p) { return p.nome === 'Cabo Multiplexado Quadruplex 4x16 mm²'; }),
+    'continuação traz o resto da página', r.j && r.j.produtos && r.j.produtos.map(function (p) { return p.nome; }));
+  // a IA de imagem falha (o mock devolve 502 para "eletrica-sul"): resposta 200 com ok:false, sem erro de rede no navegador
+  r = await api('POST', '/api/extracao/pagina', { imagem: IMG, pagina: 1, total: 1, nome_arquivo: 'catalogo-bruto-eletrica-sul.pdf' }, A);
+  check(r.s === 200 && r.j.ok === false && r.j.code && Array.isArray(r.j.tentados) && r.j.tentados.length >= 1 && /IA/.test(r.j.error),
+    'falha da IA de imagem = 200 com ok:false, motivo e modelos tentados', r.j);
 
   console.log('3) texto bruto organizado pela IA');
   r = await api('POST', '/api/extracao/estruturar-bloco', { texto: 'CABOS FLEXIVEIS 750V\n1,5mm rolo 100m\n2x1mm 500V PP\n'.repeat(3) }, A);
   check(r.s === 200 && r.j.produtos.length === 2, 'bloco de texto vira produtos', r.j);
   r = await api('POST', '/api/extracao/estruturar-bloco', { texto: 'curto' }, A);
   check(r.s === 400, 'texto curto = 400', r.s);
+
+  console.log('3b) PDF já organizado (Prompt Mestre) é lido sem gastar a IA');
+  const PM = require('fs').readFileSync(require('path').join(__dirname, 'fixtures', 'prompt_mestre.txt'), 'utf8');
+  const usadasAntes = (await (await fetch((process.env.MOCK_IA || 'http://localhost:4010') + '/api/v1/key', { headers: { Authorization: 'Bearer chave-teste' } })).json()).data.free_model_daily_requests.used;
+  r = await api('POST', '/api/extracao/analisar', { texto: PM }, A);
+  check(r.s === 200 && r.j.formato === 'prompt_mestre' && r.j.produtos.length === 3 && r.j.produtos[0].codigo === 'PP-325', 'texto do Prompt Mestre vira 3 produtos', r.j && { formato: r.j.formato, n: r.j.produtos && r.j.produtos.length });
+  check(r.j.fornecedor && /Flex Fast/.test(r.j.fornecedor.nome) && r.j.fornecedor.email === 'vendas@flexfast.com.br', 'fornecedor do bloco FORNECEDOR', r.j.fornecedor);
+  const usadasDepois = (await (await fetch((process.env.MOCK_IA || 'http://localhost:4010') + '/api/v1/key', { headers: { Authorization: 'Bearer chave-teste' } })).json()).data.free_model_daily_requests.used;
+  check(usadasDepois === usadasAntes, 'não usou a cota de IA', { usadasAntes, usadasDepois });
+  r = await api('POST', '/api/extracao/analisar', { texto: 'Catálogo 2026 da empresa com linha completa de cabos para obras e indústria.' }, A);
+  check(r.s === 200 && r.j.formato === 'texto' && r.j.produtos.length === 0, 'texto comum não vira produto', r.j);
+  r = await api('POST', '/api/extracao/analisar', { texto: 'oi' }, A);
+  check(r.s === 400, 'texto curto = 400', r.s);
+  r = await api('POST', '/api/extracao/analisar', { texto: PM });
+  check(r.s === 401, 'analisar exige login', r.s);
 
   console.log('4) fornecedor encontrado no catálogo');
   r = await api('POST', '/api/fornecedores', { nome: 'Flex Fast Fios Elétricos', observacoes: 'fios e cabos elétricos', whatsapp: '(11) 95780-8642' }, A);
@@ -90,6 +116,18 @@ const IMG = 'data:image/jpeg;base64,' + Buffer.from('ffd8ffe000104a4649460001010
   check(r.s === 404, 'não acrescenta produtos em catálogo de outra conta', r.s);
   r = await api('POST', '/api/extracao/importar/' + CAT + '/produtos', { produtos: [{ nome: 'Cordão Paralelo 300V 2x1,5 mm²', tensao: '300/300 V' }] }, A);
   check(r.s === 200 && r.j.total_produtos === 5, 'catálogo grande chega em partes', r.j);
+  // PDF já organizado: catálogo e produtos ficam marcados como Prompt Mestre (não "organizado pela IA")
+  const pm = (await api('POST', '/api/extracao/analisar', { texto: PM }, A)).j;
+  r = await api('POST', '/api/extracao/importar', { novo_fornecedor: { nome: 'Flex Fast PM' }, nome_arquivo: 'Flex PM.pdf', paginas: 2, origem: 'pdf_navegador',
+    formato: 'prompt_mestre', texto: PM, produtos: pm.produtos }, A);
+  check(r.s === 201 && r.j.produtos === 3, 'importa o PDF organizado', r.j);
+  const FPM = r.j.fornecedor_id;
+  r = await api('GET', '/api/fornecedores/' + FPM, null, A);
+  check(r.j.catalogos[0].formato === 'prompt_mestre' && r.j.catalogos[0].origem === 'pdf_navegador' && !r.j.catalogos[0].ia_info, 'catálogo marcado como Prompt Mestre, sem IA', r.j.catalogos[0]);
+  r = await api('POST', '/api/extracao/importar/' + r.j.catalogos[0].id + '/produtos', { produtos: [{ nome: 'Cabo extra 10 mm²', bitola: '10 mm²', tensao: '750 V' }] }, A);
+  r = await api('GET', '/api/fornecedores/' + FPM, null, A);
+  check(r.j.catalogos[0].formato === 'prompt_mestre' && r.j.catalogos[0].total_produtos === 4, 'parte extra mantém o formato do catálogo', r.j.catalogos[0]);
+  await api('DELETE', '/api/fornecedores/' + FPM, null, A);
 
   console.log('6) importar num fornecedor existente completa dados vazios');
   r = await api('POST', '/api/extracao/importar', { fornecedor_id: FLEX, nome_arquivo: 'Flex.pdf', origem: 'ia_visao', paginas: 1,

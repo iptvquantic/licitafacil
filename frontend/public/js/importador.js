@@ -6,12 +6,20 @@ var Importador = (function () {
   'use strict';
 
   var TENTATIVAS_PAGINA = 3;
+  var MAX_CONTINUACOES = 4; // página muito cheia: até 4 pedidos extras para ler o resto
   var BLOCO_TEXTO_IA = 6000;
   var FORMATOS_PRONTOS = ['prompt_mestre', 'json', 'tabela'];
   var CAMPOS_TECNICOS = ['codigo', 'marca', 'categoria', 'descricao', 'bitola', 'tensao', 'material', 'isolamento', 'cobertura',
     'temperatura', 'aplicacao', 'norma', 'certificacoes', 'preco', 'unidade'];
 
   function esperar(ms) { return new Promise(function (ok) { setTimeout(ok, ms); }); }
+  // A API responde { ok:false, code } quando a IA gratuita falha (cota, modelo ocupado): vira erro aqui
+  function respostaIA(r) {
+    if (r && r.ok === false) {
+      throw { error: r.error, code: r.code, tentados: r.tentados || [], status: r.code === 'COTA' ? 429 : (r.code === 'SEM_CHAVE' ? 503 : 502) };
+    }
+    return r;
+  }
   function semAcentoI(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, ''); }
   function normI(s) { return semAcentoI(s).toLowerCase().replace(/[×]/g, 'x').replace(/²/g, '2').replace(/(\d),(\d)/g, '$1.$2').replace(/\s+/g, ''); }
   function chaveProduto(p) { return [normI(p.nome), normI(p.codigo)].join('|'); }
@@ -100,7 +108,7 @@ var Importador = (function () {
         var p = estado.paginas[k];
         if (!p) return;
         if (p.estado === 'ok' || p.estado === 'sem_ia' || p.estado === 'erro') feitas++;
-        if (p.metodo === 'ia_visao' || p.metodo === 'ia_texto') comIA++;
+        if ((p.metodo === 'ia_visao' || p.metodo === 'ia_texto') && p.estado !== 'lendo') comIA++;
         if (p.estado === 'erro') falhas++;
       });
       return { feitas: feitas, total: numeros.length, produtos: juntarProdutos(numeros.map(function (k) { return estado.paginas[k] || { n: k }; })).length,
@@ -113,18 +121,18 @@ var Importador = (function () {
       emitir({ tipo: 'pagina', pagina: estado.paginas[k], resumo: resumo() });
     }
 
-    function lerComVisao(k, texto) {
+    function lerComVisao(k, texto, continuarApos) {
       var evitar = [];
       var tentativa = 0;
       function tentar(lado) {
         tentativa++;
         return doc.imagemPagina(k, lado).then(function (imagem) {
           if (estado.cancelado) throw { code: 'CANCELADO' };
-          emitir({ tipo: 'ia', pagina: k, tentativa: tentativa });
+          emitir({ tipo: 'ia', pagina: k, tentativa: tentativa, continuacao: !!continuarApos });
           return apiPost('/api/extracao/pagina', {
             imagem: imagem, texto: texto.slice(0, 15000), pagina: k, total: doc.paginas, contexto: estado.contexto,
-            nome_arquivo: opcoes.nomeArquivo || doc.nome, evitar: evitar
-          }, { timeout: 75000 });
+            nome_arquivo: opcoes.nomeArquivo || doc.nome, evitar: evitar, continuar_apos: continuarApos || ''
+          }, { timeout: 75000 }).then(respostaIA);
         }).catch(function (err) {
           if (err && err.code === 'CANCELADO') throw err;
           if (err && err.code === 'COTA') { estado.cotaAcabou = true; throw err; }
@@ -138,6 +146,32 @@ var Importador = (function () {
         });
       }
       return tentar(null);
+    }
+
+    // Página com muitos produtos: a resposta da IA pode vir cortada; pede o resto a partir do último produto lido
+    function lerPaginaCompleta(k, texto) {
+      var todos = [];
+      var primeira = null;
+      var voltas = 0;
+      function rodada(continuarApos) {
+        return lerComVisao(k, texto, continuarApos).then(function (r) {
+          if (!primeira) primeira = r;
+          var novos = r.produtos || [];
+          todos = todos.concat(novos);
+          voltas++;
+          if (r.incompleto && r.ultimo && novos.length && voltas <= MAX_CONTINUACOES && !estado.cancelado && !estado.cotaAcabou) {
+            emitir({ tipo: 'continua', pagina: k, produtos: todos.length });
+            return rodada(r.ultimo).catch(function (err) {
+              if (err && err.code === 'CANCELADO') throw err;
+              return { parcial: true }; // fica com o que já leu; a conferência avisa
+            });
+          }
+          return { parcial: !!r.incompleto };
+        });
+      }
+      return rodada('').then(function (fim) {
+        return Object.assign({}, primeira, { produtos: todos, parcial: !!(fim && fim.parcial) });
+      });
     }
 
     // Sem IA de imagem: fica o texto do PDF (ou OCR, se a página for imagem); a IA de texto organiza no fim
@@ -161,7 +195,38 @@ var Importador = (function () {
       });
     }
 
-    // PDF já organizado: um único pedido ao servidor (sem IA) organiza todas as páginas escolhidas
+    // Texto já organizado por outra IA (Prompt Mestre, JSON, tabela): o servidor organiza SEM usar a IA.
+    // Só vale se a maioria dos produtos tiver dados técnicos (evita confundir um catálogo comum com "PRODUTO 1").
+    function analisarSemIA(paginas, texto) {
+      if (texto.replace(/\s/g, '').length < 60 || !pareceOrganizado(texto)) return Promise.resolve(false);
+      return apiPost('/api/extracao/analisar', { texto: texto.slice(0, 2900000) }, { timeout: 60000 }).then(function (r) {
+        var prods = (r && r.produtos) || [];
+        var bons = prods.filter(function (p) { return camposPreenchidos(p) >= 2; }).length;
+        var organizado = FORMATOS_PRONTOS.indexOf(r && r.formato) >= 0 &&
+          prods.length >= Math.max(1, Math.ceil(paginas.length / 3)) && bons >= Math.ceil(prods.length * 0.6);
+        if (!organizado || estado.cancelado) return false;
+        var textosNorm = {};
+        paginas.forEach(function (k) { textosNorm[k] = normI(textoGuardado(k)); });
+        var porPagina = {};
+        prods.forEach(function (p) {
+          var n = paginaDoProduto(p, paginas, textosNorm);
+          (porPagina[n] = porPagina[n] || []).push(p);
+        });
+        estado.formato = r.formato;
+        paginas.forEach(function (k, i) {
+          registrar(k, { estado: 'ok', metodo: 'estruturado', texto: textoGuardado(k), produtos: porPagina[k] || [],
+            fornecedor: i === 0 ? (r.fornecedor || null) : null, erro: '', erroIA: '' });
+        });
+        emitir({ tipo: 'organizado', formato: r.formato, produtos: prods.length });
+        return true;
+      }, function () { return false; });
+    }
+    function textoGuardado(k) {
+      var p = estado.paginas[k];
+      return String((p && p.texto) || estado.textos[k] || '');
+    }
+
+    // 1º passo: PDF com texto já organizado → um único pedido, sem gastar a cota de IA
     function tentarOrganizado() {
       if (doc.tipo !== 'pdf') return Promise.resolve(false);
       emitir({ tipo: 'analise' });
@@ -173,43 +238,32 @@ var Importador = (function () {
         });
       });
       return cadeia.then(function () {
-        var total = numeros.map(function (k) { return estado.textos[k]; }).join('\n\n');
-        if (total.replace(/\s/g, '').length < 120 || !pareceOrganizado(total)) return false;
-        return apiPost('/api/extracao/analisar', { texto: total.slice(0, 2900000) }, { timeout: 60000 }).then(function (r) {
-          var prods = (r && r.produtos) || [];
-          var bons = prods.filter(function (p) { return camposPreenchidos(p) >= 2; }).length;
-          var organizado = FORMATOS_PRONTOS.indexOf(r && r.formato) >= 0 &&
-            prods.length >= Math.max(1, Math.ceil(numeros.length / 3)) && bons >= Math.ceil(prods.length * 0.6);
-          if (!organizado || estado.cancelado) return false;
-          var textosNorm = {};
-          numeros.forEach(function (k) { textosNorm[k] = normI(estado.textos[k]); });
-          var porPagina = {};
-          prods.forEach(function (p) {
-            var n = paginaDoProduto(p, numeros, textosNorm);
-            (porPagina[n] = porPagina[n] || []).push(p);
-          });
-          estado.formato = r.formato;
-          numeros.forEach(function (k, i) {
-            registrar(k, { estado: 'ok', metodo: 'estruturado', texto: estado.textos[k], produtos: porPagina[k] || [],
-              fornecedor: i === 0 ? (r.fornecedor || null) : null, erro: '', erroIA: '' });
-          });
-          emitir({ tipo: 'organizado', formato: r.formato, produtos: prods.length });
-          return true;
-        }, function () { return false; });
+        return analisarSemIA(numeros, numeros.map(function (k) { return estado.textos[k]; }).join('\n\n'));
       });
     }
 
+    // Depois da leitura: páginas lidas sem IA (texto do PDF ou OCR) que estavam organizadas (ex.: foto do Prompt Mestre)
+    function organizarSemIA(lista) {
+      var candidatas = lista.filter(function (k) {
+        var p = estado.paginas[k];
+        return p && p.estado === 'sem_ia' && !(p.produtos && p.produtos.length) && String(p.texto || '').replace(/\s/g, '').length >= 30;
+      });
+      if (!candidatas.length || estado.cancelado) return Promise.resolve(false);
+      return analisarSemIA(candidatas, candidatas.map(textoGuardado).join('\n\n'));
+    }
+
     function processar(k) {
-      registrar(k, { estado: 'lendo', metodo: estado.visao && !estado.cotaAcabou ? 'ia_visao' : null, erro: '', erroIA: '' });
+      registrar(k, { estado: 'lendo', metodo: estado.visao && !estado.cotaAcabou ? 'ia_visao' : null, erro: '', erroIA: '', parcial: false });
       return textoDaPagina(k).then(function (texto) {
         texto = String(texto || '');
         if (estado.cancelado) throw { code: 'CANCELADO' };
         if (estado.visao && !estado.cotaAcabou) {
-          return lerComVisao(k, texto).then(function (r) {
+          return lerPaginaCompleta(k, texto).then(function (r) {
             var prods = r.produtos || [];
             if (r.resumo) estado.contexto = r.resumo;
             else if (prods.length) estado.contexto = 'Produtos da página anterior: ' + prods.slice(-2).map(function (p) { return p.nome; }).join('; ');
-            registrar(k, { estado: 'ok', metodo: 'ia_visao', texto: texto, produtos: prods, fornecedor: r.fornecedor || null, resumo: r.resumo || '', modelo: r.modelo || '' });
+            registrar(k, { estado: 'ok', metodo: 'ia_visao', texto: texto, produtos: prods, fornecedor: r.fornecedor || null, resumo: r.resumo || '',
+              modelo: r.modelo || '', parcial: !!r.parcial });
           }, function (err) {
             if (err && err.code === 'CANCELADO') throw err;
             return semVisao(k, texto, err);
@@ -246,17 +300,32 @@ var Importador = (function () {
       });
       if (atual.paginas.length) blocos.push(atual);
       var i = 0;
+      // a IA gratuita às vezes responde vazio ou está ocupada: tenta de novo com outro modelo
+      function pedirBloco(b, tentativa, evitar) {
+        return apiPost('/api/extracao/estruturar-bloco', { texto: b.texto.slice(0, 16000), contexto: estado.contexto, evitar: evitar }, { timeout: 75000 })
+          .then(respostaIA)
+          .catch(function (err) {
+            if (err && err.code === 'COTA') { estado.cotaAcabou = true; throw err; }
+            var semVolta = err && (err.code === 'SEM_CHAVE' || err.code === 'CHAVE' || err.status === 400 || err.status === 401 || err.status === 402 || err.status === 403);
+            if (tentativa < 2 && !semVolta && !estado.cancelado) {
+              var outros = evitar.concat(err && Array.isArray(err.tentados) ? err.tentados : []);
+              return esperar(1500).then(function () { return pedirBloco(b, tentativa + 1, outros); });
+            }
+            throw err;
+          });
+      }
       function proximo() {
         if (estado.cancelado) return Promise.reject({ code: 'CANCELADO' });
         if (i >= blocos.length || estado.cotaAcabou) return Promise.resolve();
         var b = blocos[i++];
         emitir({ tipo: 'texto_ia', bloco: i, total: blocos.length, paginas: b.paginas });
-        return apiPost('/api/extracao/estruturar-bloco', { texto: b.texto.slice(0, 16000), contexto: estado.contexto }, { timeout: 75000 }).then(function (r) {
+        return pedirBloco(b, 1, []).then(function (r) {
           if (r.resumo) estado.contexto = r.resumo;
-          registrar(b.paginas[0], { metodo: 'ia_texto', produtos: r.produtos || [], fornecedor: r.fornecedor || null, resumo: r.resumo || '', modelo: r.modelo || '' });
-          b.paginas.slice(1).forEach(function (k) { registrar(k, { metodo: 'ia_texto' }); });
+          registrar(b.paginas[0], { metodo: 'ia_texto', produtos: r.produtos || [], fornecedor: r.fornecedor || null, resumo: r.resumo || '', modelo: r.modelo || '', erroIA: '' });
+          b.paginas.slice(1).forEach(function (k) { registrar(k, { metodo: 'ia_texto', erroIA: '' }); });
         }, function (err) {
-          if (err && err.code === 'COTA') estado.cotaAcabou = true;
+          var msg = (err && err.error) || 'A IA não organizou o texto desta página.';
+          b.paginas.forEach(function (k) { registrar(k, { erroIA: msg }); });
         }).then(proximo);
       }
       return proximo();
@@ -275,7 +344,8 @@ var Importador = (function () {
         resumos: lista.map(function (p) { return p.resumo; }).filter(Boolean),
         texto: lista.map(function (p) { return String(p.texto || '').trim(); }).filter(Boolean).join('\n\n'),
         origem: origem,
-        formato: estado.formato,
+        // "já organizado" só quando nenhuma página precisou da IA
+        formato: metodos.indexOf('ia_visao') < 0 && metodos.indexOf('ia_texto') < 0 ? estado.formato : null,
         modelos: Object.keys(estado.modelos),
         cotaAcabou: estado.cotaAcabou,
         resumo: resumo()
@@ -294,7 +364,10 @@ var Importador = (function () {
           var paralelo = estado.visao ? 2 : 1;
           var trabalhos = [];
           for (var i = 0; i < Math.min(paralelo, fila.length); i++) trabalhos.push(trabalhador(fila));
-          return Promise.all(trabalhos).then(function () { return organizarTexto(numeros); }).then(resultado);
+          return Promise.all(trabalhos)
+            .then(function () { return organizarSemIA(numeros); })
+            .then(function () { return organizarTexto(numeros); })
+            .then(resultado);
         });
       },
       // Lê de novo páginas que falharam (o arquivo continua aberto enquanto a revisão estiver na tela)
@@ -302,7 +375,10 @@ var Importador = (function () {
         estado.cancelado = false;
         if (opcoes.usarIA && cap.visao && !estado.cotaAcabou) estado.visao = true;
         var fila = lista.slice();
-        return trabalhador(fila).then(function () { return organizarTexto(lista); }).then(resultado);
+        return trabalhador(fila)
+          .then(function () { return organizarSemIA(lista); })
+          .then(function () { return organizarTexto(lista); })
+          .then(resultado);
       },
       cancelar: function () { estado.cancelado = true; LeitorCatalogo.cancelar(); },
       fechar: function () { estado.cancelado = true; try { doc.fechar(); } catch (e) { /* ignora */ } }
