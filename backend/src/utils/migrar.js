@@ -39,6 +39,9 @@ const PASSOS = [
   ['catalogos.ia_status', `ALTER TABLE catalogos ADD COLUMN IF NOT EXISTS ia_status VARCHAR(30)`],
   ['catalogos.ia_info', `ALTER TABLE catalogos ADD COLUMN IF NOT EXISTS ia_info TEXT`],
   ['chunks.texto_norm', `ALTER TABLE chunks ADD COLUMN IF NOT EXISTS texto_norm TEXT`],
+  ['fornecedores.cnpj', `ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS cnpj VARCHAR(20)`],
+  ['fornecedores.site', `ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS site VARCHAR(255)`],
+  ['fornecedores.endereco', `ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS endereco TEXT`],
   ['idx_fornecedores_usuario', `CREATE INDEX IF NOT EXISTS idx_fornecedores_usuario ON fornecedores(usuario_id)`],
   ['idx_catalogos_fornecedor', `CREATE INDEX IF NOT EXISTS idx_catalogos_fornecedor ON catalogos(fornecedor_id)`],
   ['idx_chunks_catalogo', `CREATE INDEX IF NOT EXISTS idx_chunks_catalogo ON chunks(catalogo_id)`],
@@ -111,6 +114,7 @@ function migrar() {
         "SELECT to_regclass('public.produtos') IS NOT NULL AND to_regclass('public.pagamentos') IS NOT NULL" +
         " AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'catalogos' AND column_name = 'ia_info')" +
         " AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'chunks' AND column_name = 'texto_norm')" +
+        " AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'fornecedores' AND column_name = 'endereco')" +
         " AND to_regclass('public.idx_pagamentos_status') IS NOT NULL AS pronto");
       pronto = !!(r.rows[0] && r.rows[0].pronto);
     } catch (_) { pronto = false; }

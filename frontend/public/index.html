@@ -30,6 +30,10 @@
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         <span class="sidebar-label">Buscar</span>
       </button>
+      <button type="button" class="nav-item" id="nav-importar" data-acao="ir" data-secao="importar" title="Importar catálogo">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
+        <span class="sidebar-label">Importar catálogo</span>
+      </button>
       <button type="button" class="nav-item" id="nav-fornecedores" data-acao="ir" data-secao="fornecedores" title="Fornecedores">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1"/></svg>
         <span class="sidebar-label">Fornecedores</span>
@@ -144,6 +148,30 @@
         <div id="resultados" aria-live="polite"></div>
       </section>
 
+      <!-- ════ IMPORTAR CATÁLOGO ══════════════════════════════ -->
+      <section id="secao-importar" class="secao hidden" aria-labelledby="titulo-importar">
+        <div class="page-head">
+          <div>
+            <h2 class="page-title" id="titulo-importar">Importar catálogo</h2>
+            <p class="page-sub">Envie o PDF ou as fotos do catálogo. A IA lê página por página, encontra o fornecedor e organiza todos os produtos. Você confere tudo antes de salvar.</p>
+          </div>
+        </div>
+        <div id="imp-entrada-importar">
+          <div class="dropzone dropzone-grande" id="dz-importar" role="button" tabindex="0" aria-describedby="dz-importar-sub">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
+            <div class="titulo">Arraste o catálogo aqui ou clique para escolher</div>
+            <div class="sub" id="dz-importar-sub">PDF (com texto, escaneado ou só imagem) ou fotos JPG, PNG, WEBP · até 50 MB</div>
+          </div>
+          <input type="file" id="input-importar" class="sr-only" tabindex="-1" aria-hidden="true" multiple accept=".pdf,application/pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+          <div class="aviso">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
+            <div>O arquivo <strong>não fica guardado em servidor nenhum</strong>: cada página é lida e descartada. Ficam só os produtos e os dados do fornecedor que você aprovar.</div>
+          </div>
+          <div id="imp-capacidades-importar" class="imp-capacidades" aria-live="polite"></div>
+        </div>
+        <div id="imp-trabalho-importar" aria-live="polite"></div>
+      </section>
+
       <!-- ════ FORNECEDORES ═══════════════════════════════════ -->
       <section id="secao-fornecedores" class="secao hidden" aria-labelledby="titulo-fornecedores">
         <div class="page-head">
@@ -151,10 +179,16 @@
             <h2 class="page-title" id="titulo-fornecedores">Fornecedores</h2>
             <p class="page-sub">Cadastre quem vende para você e leia os catálogos de cada um.</p>
           </div>
-          <button type="button" class="btn btn-primary" data-acao="novo-fornecedor">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            Novo fornecedor
-          </button>
+          <div class="flex gap-2" style="flex-wrap:wrap">
+            <button type="button" class="btn btn-secondary" data-acao="novo-fornecedor">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              Novo fornecedor
+            </button>
+            <button type="button" class="btn btn-primary" data-acao="ir" data-secao="importar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/></svg>
+              Importar catálogo
+            </button>
+          </div>
         </div>
         <div class="barra-ferramentas">
           <div class="input-icone">
@@ -256,22 +290,20 @@
             </div>
 
             <div id="entrada-arquivo">
-              <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-describedby="dropzone-sub">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
-                <div class="titulo">Arraste o catálogo aqui ou clique para escolher</div>
-                <div class="sub" id="dropzone-sub">PDF (com texto ou escaneado), JPG, PNG ou WEBP · até 50 MB</div>
+              <div id="imp-entrada-fornecedor">
+                <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-describedby="dropzone-sub">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
+                  <div class="titulo">Arraste o catálogo aqui ou clique para escolher</div>
+                  <div class="sub" id="dropzone-sub">PDF (com texto, escaneado ou só imagem) ou fotos JPG, PNG, WEBP · até 50 MB</div>
+                </div>
+                <input type="file" id="input-arquivo" class="sr-only" tabindex="-1" aria-hidden="true" multiple accept=".pdf,application/pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                <div class="aviso">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
+                  <div>O arquivo <strong>não fica guardado em servidor nenhum</strong>: a IA lê cada página e você confere os produtos antes de salvar.</div>
+                </div>
+                <div id="imp-capacidades-fornecedor" class="imp-capacidades" aria-live="polite"></div>
               </div>
-              <input type="file" id="input-arquivo" class="sr-only" tabindex="-1" aria-hidden="true" accept=".pdf,application/pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
-              <div class="aviso">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
-                <div>O arquivo é lido no seu computador e <strong>não fica guardado em servidor nenhum</strong> — só o texto vai para a busca. Catálogo escaneado ou foto é lido por OCR e pode levar alguns minutos.</div>
-              </div>
-              <div id="progresso-leitura" class="progresso hidden">
-                <div class="linha"><span id="progresso-texto" aria-live="polite">Preparando…</span><span id="progresso-pct">0%</span></div>
-                <div class="barra" id="progresso-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="progresso-texto"><div id="progresso-fill"></div></div>
-                <div class="mt-3"><button type="button" class="btn btn-ghost btn-sm" data-acao="cancelar-leitura">Cancelar leitura</button></div>
-              </div>
-              <div id="resultado-arquivo" aria-live="polite"></div>
+              <div id="imp-trabalho-fornecedor" aria-live="polite"></div>
             </div>
 
             <div id="entrada-colar" class="hidden">
@@ -449,14 +481,30 @@
           <input class="input" id="forn-whatsapp" type="tel" maxlength="50" placeholder="(11) 99999-9999">
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label" for="forn-email">E-mail</label>
-        <input class="input" id="forn-email" type="email" maxlength="255" placeholder="vendas@fornecedor.com.br">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="forn-email">E-mail</label>
+          <input class="input" id="forn-email" type="email" maxlength="255" placeholder="vendas@fornecedor.com.br">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="forn-cnpj">CNPJ</label>
+          <input class="input" id="forn-cnpj" inputmode="numeric" maxlength="20" placeholder="00.000.000/0000-00">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="forn-site">Site</label>
+          <input class="input" id="forn-site" type="url" maxlength="255" placeholder="www.fornecedor.com.br">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="forn-endereco">Endereço</label>
+          <input class="input" id="forn-endereco" maxlength="500" placeholder="Rua, número, cidade/UF">
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label" for="forn-obs">Especialidade / observações</label>
         <textarea class="textarea" id="forn-obs" maxlength="2000" placeholder="Ex.: fios e cabos elétricos de baixa tensão; atende licitações em SP"></textarea>
-        <span class="form-hint">Telefone, WhatsApp e e-mail vazios são completados sozinhos quando o catálogo trouxer esses dados.</span>
+        <span class="form-hint">Campos vazios são completados sozinhos quando o catálogo trouxer esses dados.</span>
       </div>
       <div class="form-error hidden" id="forn-erro" role="alert"></div>
     </div>
@@ -485,6 +533,7 @@
 </div>
 
 <script src="js/leitor.js?v=20261029"></script>
+<script src="js/importador.js?v=20261029"></script>
 <script src="js/app.js?v=20261029"></script>
 </body>
 </html>
