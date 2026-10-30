@@ -6,6 +6,8 @@
 // - cenários: "eletrica-sul" (IA de imagem falha), "densa" (resposta cortada pelo limite de tokens),
 //   "lenta" (a IA trava no meio da resposta: o servidor devolve o que chegou e o navegador pede o resto)
 // - POST /__reiniciar recomeça a cota; POST /__demora?ms=N deixa as respostas lentas (para ver a tela de progresso)
+// - /gemini/chat/completions simula o Google Gemini (API compatível com OpenAI): chave "chave-gemini"; chave errada = 400
+//   "API key not valid"; modelo "gemini-limite-dia" = 429 do limite diário do plano gratuito
 const http = require('http');
 const PORTA = parseInt(process.env.PORTA_MOCK || '4010', 10);
 const chamadas = [];
@@ -129,8 +131,20 @@ http.createServer((req, res) => {
     }
     let j = {};
     try { j = JSON.parse(body || '{}'); } catch (e) { res.statusCode = 400; return res.end('{"error":"json"}'); }
-    chamadas.push(j.model);
-    if (req.headers.authorization !== 'Bearer chave-teste') { res.statusCode = 401; return res.end('{"error":"bad key"}'); }
+    const gemini = req.url.indexOf('/gemini/') === 0;
+    chamadas.push((gemini ? 'gemini:' : '') + j.model);
+    if (gemini) {
+      if (req.headers.authorization !== 'Bearer chave-gemini') {
+        res.statusCode = 400;
+        return res.end(JSON.stringify([{ error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT' } }]));
+      }
+      if (j.model === 'gemini-limite-dia') {
+        res.statusCode = 429;
+        return res.end(JSON.stringify([{ error: { code: 429, status: 'RESOURCE_EXHAUSTED',
+          message: 'You exceeded your current quota. Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier' } }]));
+      }
+      if (j.reasoning || j.response_format) { res.statusCode = 400; return res.end('{"error":{"message":"parâmetro não suportado pelo Gemini"}}'); }
+    } else if (req.headers.authorization !== 'Bearer chave-teste') { res.statusCode = 401; return res.end('{"error":"bad key"}'); }
     if (/deepseek/.test(j.model)) { res.statusCode = 429; return res.end('{"error":{"message":"Provider returned error: rate-limited upstream","code":429}}'); }
     if (/nemotron/.test(j.model)) return responder(res, j, '', 'length'); // o raciocínio consumiu todos os tokens: conteúdo vazio
     usadas++;

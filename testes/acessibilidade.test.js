@@ -34,6 +34,14 @@ function esperarAnimacoes(pg) {
     ['busca', SITE + '/#busca', async () => { await p.fill('#campo-busca', 'cabo PP 3x2,5mm'); await p.click('#btn-buscar'); await p.waitForSelector('#resultados .tabela'); }],
     ['fornecedores', SITE + '/#fornecedores', async () => { await p.waitForSelector('#lista-fornecedores .tabela'); }],
     ['produtos', SITE + '/#fornecedor/' + fid, async () => { await p.waitForSelector('#tbody-produtos tr'); }],
+    ['produto à mão (formulário)', SITE + '/#fornecedor/' + fid, async () => {
+      await p.waitForSelector('#tbody-produtos tr');
+      await p.click('#tbody-produtos [data-acao="editar-produto"]');
+      await p.waitForSelector('#modal-produto.open');
+      await p.click('#prod-mais summary');
+    }, false, async () => {
+      await p.click('#modal-produto [data-acao="fechar-modal"]');
+    }],
     ['adicionar', SITE + '/#fornecedor/' + fid + '/adicionar', async () => { await p.waitForSelector('#painel-adicionar:not(.hidden)'); }],
     ['config', SITE + '/#config', async () => { await p.waitForSelector('#secao-config:not(.hidden)'); }],
     ['admin', SITE + '/#admin', async () => { await p.waitForSelector('#adm-usuarios .tabela'); }],

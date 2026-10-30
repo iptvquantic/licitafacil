@@ -65,7 +65,45 @@ async function api(method, path, body, token) {
   r = await api('POST', '/api/busca/responder', { consulta: 'cabo PP 3x2,5mm' }, A);
   check(r.s === 200 && r.j.fallback === true && /PP-325/.test(r.j.resposta) && /WhatsApp/.test(r.j.resposta), 'resposta automática lista produto e contato', r.j.resposta);
 
+  console.log('4b) produto cadastrado à mão e correção');
+  r = await api('POST', '/api/fornecedores/' + F + '/produtos', { codigo: 'X' }, A);
+  check(r.s === 400 && /nome/i.test(r.j.error || ''), 'produto sem nome = 400', r);
+  r = await api('POST', '/api/fornecedores/' + F + '/produtos', { nome: 'Disjuntor DIN Curva C 32A', codigo: 'DJ-C32', bitola: '32 A', tensao: '230/400 V',
+    preco: 'R$ 21,90', unidade: 'peça', atributos: { 'Polos': '1', 'Capacidade de interrupção': '3 kA' } }, A);
+  check(r.s === 201 && r.j.criado === true && r.j.produto && r.j.produto.origem === 'manual' && r.j.produto.nome_arquivo === 'Produtos cadastrados à mão' &&
+    r.j.produto.atributos.Polos === '1', 'cadastra produto à mão', r.j);
+  const PM = r.j.produto && r.j.produto.id;
+  r = await api('POST', '/api/busca', { consulta: 'DJ-C32' }, A);
+  check((r.j.produtos || []).some(x => x.codigo === 'DJ-C32'), 'busca acha o produto cadastrado à mão', r.j.produtos && r.j.produtos.map(x => x.nome));
+  r = await api('POST', '/api/busca', { consulta: 'disjuntor' }, A);
+  check((r.j.fornecedores || []).some(f => f.fornecedor_id === F && f.produtos_encontrados === 1), 'busca "disjuntor" mostra o fornecedor com 1 produto', r.j.fornecedores);
+  r = await api('PUT', '/api/fornecedores/' + F + '/produtos/' + PM, { nome: 'Disjuntor DIN Curva C 40A', codigo: 'DJ-C40', bitola: '40 A' }, A);
+  check(r.s === 200 && r.j.produto.nome === 'Disjuntor DIN Curva C 40A' && !r.j.produto.preco && Object.keys(r.j.produto.atributos || {}).length === 0,
+    'corrige produto (campo apagado fica vazio)', r.j);
+  r = await api('POST', '/api/busca', { consulta: 'DJ-C32' }, A);
+  check(!(r.j.produtos || []).some(x => x.codigo === 'DJ-C32'), 'código antigo some da busca', r.j.produtos && r.j.produtos.map(x => x.codigo));
+  r = await api('GET', '/api/fornecedores/' + F, null, A);
+  const catManual = (r.j.catalogos || []).filter(c => c.origem === 'manual')[0];
+  check(catManual && catManual.total_produtos === 1 && r.j.total_produtos === 4, 'catálogo "à mão" com 1 produto (total 4)', r.j.catalogos);
+  r = await api('GET', '/api/fornecedores/' + F + '/produtos', null, A);
+  const lido = (r.j.produtos || []).filter(p => p.origem !== 'manual')[0];
+  r = await api('PUT', '/api/fornecedores/' + F + '/produtos/' + lido.id, Object.assign({}, lido, { preco: 'R$ 9,99' }), A);
+  check(r.s === 200 && r.j.produto.preco === 'R$ 9,99' && r.j.produto.nome === lido.nome && r.j.produto.origem === lido.origem,
+    'corrige o preço de um produto lido do catálogo', r.j);
+
   console.log('5) segurança');
+  r = await api('PUT', '/api/fornecedores/' + F + '/produtos/' + PM, { nome: 'invasor' }, B);
+  check(r.s === 404, 'IDOR: B não corrige produto de A', r);
+  r = await api('DELETE', '/api/fornecedores/' + F + '/produtos/' + PM, null, B);
+  check(r.s === 404, 'IDOR: B não exclui produto de A', r);
+  r = await api('POST', '/api/fornecedores/' + F + '/produtos', { nome: 'invasor' }, B);
+  check(r.s === 404, 'IDOR: B não cadastra produto no fornecedor de A', r);
+  r = await api('PUT', '/api/fornecedores/' + F + '/produtos/abc', { nome: 'x' }, A);
+  check(r.s === 404, 'produto com id inválido = 404', r);
+  r = await api('DELETE', '/api/fornecedores/' + F + '/produtos/' + PM, null, A);
+  check(r.s === 200 && r.j.ok === true, 'exclui produto à mão', r);
+  r = await api('GET', '/api/fornecedores/' + F, null, A);
+  check(!(r.j.catalogos || []).some(c => c.origem === 'manual') && r.j.total_produtos === 3, 'sem produto à mão, o catálogo "à mão" some', r.j.catalogos);
   r = await api('GET', '/api/fornecedores/' + F + '/catalogo/' + C + '/status', null, B);
   check(r.s === 404, 'IDOR status bloqueado', r);
   r = await api('DELETE', '/api/fornecedores/' + F + '/catalogo/' + C, null, B);

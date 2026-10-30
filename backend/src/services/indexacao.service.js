@@ -298,6 +298,111 @@ async function acrescentarProdutos(o) {
   });
 }
 
+// ─── Produtos cadastrados à mão (e correção de produtos lidos pela IA) ───────────
+// Os produtos à mão ficam num "catálogo" próprio do fornecedor (origem 'manual'), criado no primeiro produto.
+const NOME_CATALOGO_MANUAL = 'Produtos cadastrados à mão';
+const CAMPOS_LONGOS = ['descricao', 'aplicacao'];
+
+function dadosProduto(body) {
+  body = body || {};
+  const p = {};
+  leitor.CAMPOS.forEach(function (c) {
+    const v = limparCampo(body[c], CAMPOS_LONGOS.indexOf(c) >= 0 ? 1500 : 300);
+    if (v) p[c] = v;
+  });
+  const fonte = body.atributos && typeof body.atributos === 'object' && !Array.isArray(body.atributos) ? body.atributos : {};
+  const atributos = {};
+  Object.keys(fonte).slice(0, 40).forEach(function (k) {
+    const chave = limparCampo(k, 80);
+    const valor = limparCampo(fonte[k], 300);
+    if (chave && valor) atributos[chave] = valor;
+  });
+  p.atributos = atributos;
+  return p;
+}
+
+function idValido(v) {
+  const n = parseInt(v, 10);
+  return n > 0 && String(n) === String(v).trim() ? n : null;
+}
+
+async function catalogoManual(client, fornecedorId) {
+  const r = await client.query("SELECT id FROM catalogos WHERE fornecedor_id = $1 AND origem = 'manual' ORDER BY id LIMIT 1", [fornecedorId]);
+  if (r.rows.length) return r.rows[0].id;
+  const novo = await client.query(
+    "INSERT INTO catalogos (fornecedor_id, nome_arquivo, status, origem, formato, total_produtos) VALUES ($1, $2, 'processado', 'manual', 'manual', 0) RETURNING id",
+    [fornecedorId, NOME_CATALOGO_MANUAL]);
+  return novo.rows[0].id;
+}
+
+async function recontarCatalogo(client, catalogoId) {
+  await client.query('UPDATE catalogos SET total_produtos = (SELECT count(*) FROM produtos WHERE catalogo_id = $1), atualizado_em = NOW() WHERE id = $1', [catalogoId]);
+}
+
+// O texto de busca antigo do produto (trecho) sai junto quando ele é corrigido ou excluído
+async function apagarTrechoDoProduto(client, catalogoId, nome) {
+  if (!nome) return;
+  const prefixo = 'Nome: ' + nome;
+  await client.query("DELETE FROM chunks WHERE catalogo_id = $1 AND (conteudo = $2 OR conteudo LIKE $3 ESCAPE '\\')",
+    [catalogoId, prefixo, prefixo.replace(/[\\%_]/g, '\\$&') + '\n%']);
+}
+
+const SELECT_PRODUTO = 'SELECT p.id, p.catalogo_id, p.ordem, p.nome, p.codigo, p.marca, p.categoria, p.descricao, p.bitola, p.tensao, p.material,' +
+  ' p.isolamento, p.cobertura, p.temperatura, p.aplicacao, p.norma, p.certificacoes, p.preco, p.unidade, p.atributos, p.origem,' +
+  ' c.nome_arquivo FROM produtos p LEFT JOIN catalogos c ON c.id = p.catalogo_id WHERE p.id = $1';
+
+// Cria (sem produtoId) ou corrige (com produtoId) um produto do fornecedor
+async function salvarProduto(o) {
+  const fornecedorId = idValido(o.fornecedorId);
+  const produtoId = o.produtoId == null ? null : idValido(o.produtoId);
+  if (!fornecedorId) throw new ErroLeitura('Fornecedor não encontrado', 404);
+  if (o.produtoId != null && !produtoId) throw new ErroLeitura('Produto não encontrado', 404);
+  const p = dadosProduto(o.dados);
+  if (!p.nome) throw new ErroLeitura('Informe o nome do produto.');
+  return db.transaction(async function (client) {
+    const f = await client.query('SELECT id FROM fornecedores WHERE id = $1 AND usuario_id = $2 AND ativo = 1', [fornecedorId, o.usuarioId]);
+    if (!f.rows.length) throw new ErroLeitura('Fornecedor não encontrado', 404);
+    if (produtoId) {
+      const antes = await client.query('SELECT id, catalogo_id, nome FROM produtos WHERE id = $1 AND fornecedor_id = $2 AND usuario_id = $3',
+        [produtoId, fornecedorId, o.usuarioId]);
+      if (!antes.rows.length) throw new ErroLeitura('Produto não encontrado', 404);
+      const vals = leitor.CAMPOS.map(function (c) { return p[c] || null; });
+      const n = vals.length;
+      vals.push(JSON.stringify(p.atributos), textoNormProduto(p), produtoId);
+      await client.query('UPDATE produtos SET ' + leitor.CAMPOS.map(function (c, i) { return c + ' = $' + (i + 1); }).join(', ') +
+        ', atributos = $' + (n + 1) + ', texto_norm = $' + (n + 2) + ' WHERE id = $' + (n + 3), vals);
+      await apagarTrechoDoProduto(client, antes.rows[0].catalogo_id, antes.rows[0].nome);
+      return { produto: (await client.query(SELECT_PRODUTO, [produtoId])).rows[0], criado: false };
+    }
+    const catalogoId = await catalogoManual(client, fornecedorId);
+    const ordem = (await client.query('SELECT COALESCE(max(ordem), -1)::int + 1 AS n FROM produtos WHERE catalogo_id = $1', [catalogoId])).rows[0].n;
+    const ins = await client.query('INSERT INTO produtos (' + COLUNAS_PRODUTO.join(', ') + ') VALUES (' +
+      COLUNAS_PRODUTO.map(function (c, i) { return '$' + (i + 1); }).join(', ') + ') RETURNING id',
+      linhaProduto(p, ordem, { usuarioId: o.usuarioId, fornecedorId: fornecedorId, catalogoId: catalogoId }, 'manual'));
+    await recontarCatalogo(client, catalogoId);
+    return { produto: (await client.query(SELECT_PRODUTO, [ins.rows[0].id])).rows[0], criado: true };
+  });
+}
+
+async function excluirProduto(o) {
+  const fornecedorId = idValido(o.fornecedorId);
+  const produtoId = idValido(o.produtoId);
+  if (!fornecedorId || !produtoId) throw new ErroLeitura('Produto não encontrado', 404);
+  return db.transaction(async function (client) {
+    const r = await client.query('DELETE FROM produtos WHERE id = $1 AND fornecedor_id = $2 AND usuario_id = $3 RETURNING catalogo_id, nome',
+      [produtoId, fornecedorId, o.usuarioId]);
+    if (!r.rows.length) throw new ErroLeitura('Produto não encontrado', 404);
+    const catalogoId = r.rows[0].catalogo_id;
+    await apagarTrechoDoProduto(client, catalogoId, r.rows[0].nome);
+    const resto = (await client.query('SELECT count(*)::int AS n FROM produtos WHERE catalogo_id = $1', [catalogoId])).rows[0].n;
+    // o "catálogo" dos produtos à mão some quando fica vazio (não polui a aba Catálogos)
+    const manual = (await client.query("SELECT origem FROM catalogos WHERE id = $1", [catalogoId])).rows[0];
+    if (!resto && manual && manual.origem === 'manual') await client.query('DELETE FROM catalogos WHERE id = $1', [catalogoId]);
+    else await recontarCatalogo(client, catalogoId);
+    return { ok: true };
+  });
+}
+
 // Libera catálogos presos (servidor reiniciou ou a função da Vercel terminou no meio). Só mexe no que está parado há 15 min.
 async function liberarPresos() {
   await db.query("UPDATE catalogos SET ia_status = 'interrompido', ia_info = 'A organização pela IA foi interrompida. Clique em Organizar com IA para tentar de novo.' WHERE ia_status IN ('na_fila', 'estruturando') AND atualizado_em < NOW() - INTERVAL '15 minutes'");
@@ -312,4 +417,4 @@ async function extrairTextoPDF(buffer) {
 }
 
 module.exports = { indexarTexto, estruturarParte, partesDoCatalogo, importarCatalogo, acrescentarProdutos, completarFornecedor,
-  liberarPresos, extrairTextoPDF, mensagemErroIA, ErroLeitura, waLink };
+  liberarPresos, extrairTextoPDF, mensagemErroIA, ErroLeitura, waLink, salvarProduto, excluirProduto, dadosProduto };

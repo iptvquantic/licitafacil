@@ -34,7 +34,7 @@ const limiteLeituraIA = rateLimit({
 // e o navegador decide (tenta outro modelo, lê sem IA ou para). Assim o console do navegador não acusa erro de rede.
 function respostaErroIA(res, err) {
   if (err && err.amigavel) return res.status(err.status).json({ error: err.message });
-  if (err && err.code) return res.json({ ok: false, error: indexacao.mensagemErroIA(err), code: err.code, tentados: err.tentados || [] });
+  if (err && err.code) return res.json({ ok: false, error: indexacao.mensagemErroIA(err), code: err.code, tentados: err.tentados || [], motivos: err.motivos || [] });
   console.error('Erro na leitura com IA:', err && err.message);
   return res.status(500).json({ error: 'Não foi possível ler esta parte agora.' });
 }

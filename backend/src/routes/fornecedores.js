@@ -156,6 +156,41 @@ router.get('/:id/produtos', async (req, res) => {
   }
 });
 
+// POST /api/fornecedores/:id/produtos — produto cadastrado à mão
+router.post('/:id/produtos', async (req, res) => {
+  try {
+    const out = await indexacao.salvarProduto({ usuarioId: req.usuario.id, fornecedorId: req.params.id, dados: req.body });
+    res.status(201).json(Object.assign({ ok: true }, out));
+  } catch (err) {
+    if (err.amigavel) return res.status(err.status).json({ error: err.message });
+    console.error('Erro ao cadastrar produto:', err.message);
+    res.status(500).json({ error: 'Erro ao salvar o produto' });
+  }
+});
+
+// PUT /api/fornecedores/:id/produtos/:pid — corrige um produto (cadastrado à mão ou lido do catálogo)
+router.put('/:id/produtos/:pid', async (req, res) => {
+  try {
+    const out = await indexacao.salvarProduto({ usuarioId: req.usuario.id, fornecedorId: req.params.id, produtoId: req.params.pid, dados: req.body });
+    res.json(Object.assign({ ok: true }, out));
+  } catch (err) {
+    if (err.amigavel) return res.status(err.status).json({ error: err.message });
+    console.error('Erro ao corrigir produto:', err.message);
+    res.status(500).json({ error: 'Erro ao salvar o produto' });
+  }
+});
+
+// DELETE /api/fornecedores/:id/produtos/:pid
+router.delete('/:id/produtos/:pid', async (req, res) => {
+  try {
+    res.json(await indexacao.excluirProduto({ usuarioId: req.usuario.id, fornecedorId: req.params.id, produtoId: req.params.pid }));
+  } catch (err) {
+    if (err.amigavel) return res.status(err.status).json({ error: err.message });
+    console.error('Erro ao excluir produto:', err.message);
+    res.status(500).json({ error: 'Erro ao excluir o produto' });
+  }
+});
+
 // PUT /api/fornecedores/:id
 router.put('/:id', async (req, res) => {
   try {
@@ -255,7 +290,7 @@ router.post('/:id/catalogo/:cid/estruturar', async (req, res) => {
   } catch (err) {
     if (err.amigavel) return res.status(err.status).json({ error: err.message });
     // falha da IA gratuita é esperada: 200 com ok:false (o navegador decide se tenta de novo, sem erro de rede no console)
-    if (err.code) return res.json({ ok: false, error: err.mensagem || indexacao.mensagemErroIA(err), code: err.code });
+    if (err.code) return res.json({ ok: false, error: err.mensagem || indexacao.mensagemErroIA(err), code: err.code, motivos: err.motivos || [] });
     console.error('Erro ao estruturar:', err.message);
     res.status(500).json({ error: 'Erro ao organizar com a IA' });
   }

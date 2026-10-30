@@ -1,4 +1,4 @@
-// src/services/ai.service.js — IA via OpenRouter: escolhe sozinha os modelos gratuitos vivos (texto e leitura de imagem)
+// src/services/ai.service.js — IA: Google Gemini (chave grátis, opcional e preferida) + OpenRouter (modelos gratuitos vivos)
 'use strict';
 const { buscar } = require('./busca.service');
 const extrator = require('./extrator.service');
@@ -9,6 +9,19 @@ const URL_MODELOS = BASE_OPENROUTER + '/models';
 const URL_CHAVE = BASE_OPENROUTER + '/key';
 const SEIS_HORAS = 6 * 3600 * 1000;
 const NA_VERCEL = !!process.env.VERCEL;
+
+// Google Gemini pela API compatível com OpenAI (chave gratuita do Google AI Studio). Quando existe, vem primeiro:
+// lê tabelas de imagem com mais precisão e sem a fila dos modelos gratuitos do OpenRouter.
+const BASE_GEMINI = (process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai').replace(/\/$/, '');
+const PREFIXO_GEMINI = 'gemini:';
+function geminiConfigurado() { return !!process.env.GEMINI_API_KEY; }
+function openrouterConfigurado() { return !!process.env.OPENROUTER_API_KEY; }
+function modelosGemini() {
+  const lista = String(process.env.GEMINI_MODELOS || 'gemini-flash-lite-latest,gemini-flash-latest,gemini-2.5-flash-lite')
+    .split(',').map(function (m) { return m.trim(); }).filter(Boolean);
+  return lista.map(function (m) { return PREFIXO_GEMINI + m; });
+}
+function ehGemini(modelo) { return String(modelo).indexOf(PREFIXO_GEMINI) === 0; }
 
 // Famílias preferidas por tarefa: as que estiverem gratuitas no momento sobem na fila
 const PREFERIDOS = {
@@ -32,7 +45,7 @@ const estado = {
   cotaEm: 0
 };
 
-function configurada() { return !!process.env.OPENROUTER_API_KEY; }
+function configurada() { return openrouterConfigurado() || geminiConfigurado(); }
 
 function erroIA(msg, code) { const e = new Error(msg); e.code = code || 'INDISPONIVEL'; return e; }
 
@@ -83,19 +96,25 @@ function infoModelo(id) {
 async function candidatos(tarefa, max, evitar) {
   evitar = evitar || [];
   const lista = [];
-  const fixo = tarefa === 'visao' ? process.env.OPENROUTER_MODEL_VISAO : process.env.OPENROUTER_MODEL;
-  if (fixo) lista.push(fixo);
-  if (estado.bom[tarefa]) lista.push(estado.bom[tarefa]);
-  const modelos = (await listarModelos()).filter(function (m) { return tarefa !== 'visao' || m.imagem; });
-  modelos.slice().sort(function (a, b) { return pontuarModelo(b, tarefa) - pontuarModelo(a, tarefa); })
-    .forEach(function (m) { lista.push(m.id); });
-  if (!lista.length) lista.push('openrouter/free');
+  if (geminiConfigurado() && !(estado.geminiDesligadoAte > Date.now())) modelosGemini().forEach(function (m) { lista.push(m); });
+  if (openrouterConfigurado()) {
+    const fixo = tarefa === 'visao' ? process.env.OPENROUTER_MODEL_VISAO : process.env.OPENROUTER_MODEL;
+    if (fixo) lista.push(fixo);
+    if (estado.bom[tarefa] && !ehGemini(estado.bom[tarefa])) lista.push(estado.bom[tarefa]);
+    const modelos = (await listarModelos()).filter(function (m) { return tarefa !== 'visao' || m.imagem; });
+    modelos.slice().sort(function (a, b) { return pontuarModelo(b, tarefa) - pontuarModelo(a, tarefa); })
+      .forEach(function (m) { lista.push(m.id); });
+    if (!modelos.length) lista.push('openrouter/free');
+  }
   const unicos = lista.filter(function (id, i) { return lista.indexOf(id) === i && evitar.indexOf(id) < 0; });
   const agora = Date.now();
   const livres = unicos.filter(function (id) { return !(estado.pausa[id] > agora); });
   // primeiro os modelos sem pausa; os pausados (erro recente) ficam no fim como última chance
   const pausados = unicos.filter(function (id) { return livres.indexOf(id) < 0; });
-  return livres.concat(pausados).slice(0, max || 4);
+  const ordem = livres.concat(pausados);
+  // o Gemini (até 2 modelos, só os sem pausa) vem antes e não ocupa as vagas dos modelos do OpenRouter
+  const doGemini = livres.filter(ehGemini).slice(0, 2);
+  return doGemini.concat(ordem.filter(function (id) { return !ehGemini(id); }).slice(0, max || 4));
 }
 
 function pausar(modelo, minutos) { estado.pausa[modelo] = Date.now() + minutos * 60000; }
@@ -119,14 +138,17 @@ async function lerStream(r, o) {
   let erro = null;
   let cortado = null;
   let fim = false;
-  let ultimoConteudo = Date.now(); // comentários de "processando" não contam: só texto da resposta
+  // "vivo" = chegou texto da resposta ou do raciocínio do modelo; comentários de "processando" do OpenRouter não contam.
+  // Antes do primeiro sinal a espera é maior (fila do modelo gratuito); depois, IA parada por paradoMs = travada.
+  const inicioLeitura = Date.now();
+  let ultimaAtividade = 0;
   let pendente = null;             // a leitura em andamento continua valendo depois de uma espera sem dados
   while (!fim) {
     const agora = Date.now();
     const resta = o.prazoEm - agora;
     if (resta <= 0) { cortado = 'prazo'; break; }
-    const semConteudo = o.paradoMs - (agora - ultimoConteudo);
-    if (semConteudo <= 0) { cortado = 'parado'; break; }
+    const semConteudo = ultimaAtividade ? o.paradoMs - (agora - ultimaAtividade) : (o.primeiroMs || o.paradoMs) - (agora - inicioLeitura);
+    if (semConteudo <= 0) { cortado = ultimaAtividade ? 'parado' : 'sem_resposta'; break; }
     let timer = null;
     const espera = new Promise(function (ok) { timer = setTimeout(function () { ok({ tempo: true }); }, Math.min(resta, semConteudo)); });
     let pedaco;
@@ -160,7 +182,8 @@ async function lerStream(r, o) {
       let novo = '';
       if (typeof d.content === 'string') novo = d.content;
       else if (Array.isArray(d.content)) novo = d.content.map(function (p) { return (p && (p.text || p.content)) || ''; }).join('');
-      if (novo) { texto += novo; ultimoConteudo = Date.now(); }
+      if (novo) { texto += novo; ultimaAtividade = Date.now(); }
+      else if (d.reasoning || d.reasoning_content || (Array.isArray(d.reasoning_details) && d.reasoning_details.length)) ultimaAtividade = Date.now();
       if (c.finish_reason) motivo = c.finish_reason;
     }
   }
@@ -174,80 +197,108 @@ function pausarSeFalhou(modelo, tarefa, minutos) {
   if (estado.bom[tarefa] === modelo) estado.bom[tarefa] = null;
 }
 
-// Chama a IA tentando vários modelos gratuitos até um responder (e passar na validação, quando houver).
-// opcoes.stream: lê em streaming e, se o prazo acabar no meio, devolve o que já chegou (motivo "parcial").
+// Chama a IA tentando vários modelos até um responder (e passar na validação, quando houver): Gemini primeiro (se houver chave),
+// depois os gratuitos do OpenRouter. opcoes.stream: lê em streaming e, se o prazo acabar no meio, devolve o que já chegou ("parcial").
+// O motivo de cada tentativa fica em e.motivos (aparece no Painel do dono e ajuda a entender falhas).
 async function chamarIA(mensagens, opcoes) {
   opcoes = opcoes || {};
-  if (!configurada()) throw erroIA('IA não configurada (OPENROUTER_API_KEY ausente)', 'SEM_CHAVE');
+  if (!configurada()) throw erroIA('IA não configurada (OPENROUTER_API_KEY ou GEMINI_API_KEY ausente)', 'SEM_CHAVE');
   const tarefa = opcoes.tarefa === 'visao' ? 'visao' : 'texto';
   const lista = await candidatos(tarefa, opcoes.tentativas || (NA_VERCEL ? 3 : 4), opcoes.evitar);
   const prazo = Date.now() + (opcoes.prazoMs || (NA_VERCEL ? 50000 : 150000));
   let ultimo = 'sem resposta';
   const tentados = [];
+  const motivos = [];
+  function falhou(modelo, motivo) { ultimo = modelo + ': ' + motivo; motivos.push(nomeCurto(modelo) + ': ' + motivo); }
   for (const modelo of lista) {
     const resta = prazo - Date.now();
-    if (resta < 8000) { ultimo = ultimo + ' (tempo esgotado)'; break; }
+    if (resta < 8000) { motivos.push('tempo da leitura esgotado'); ultimo = ultimo + ' (tempo esgotado)'; break; }
+    const gemini = ehGemini(modelo);
+    if (gemini && estado.geminiDesligadoAte > Date.now()) continue; // a chave foi recusada nesta mesma leitura
     tentados.push(modelo);
-    const info = infoModelo(modelo);
+    const info = gemini ? null : infoModelo(modelo);
     const params = info ? info.params : [];
     const corpo = {
-      model: modelo,
+      model: gemini ? modelo.slice(PREFIXO_GEMINI.length) : modelo,
       messages: mensagens,
       max_tokens: opcoes.maxTokens || 900,
       temperature: opcoes.temperatura == null ? 0.2 : opcoes.temperatura
     };
     if (opcoes.stream) corpo.stream = true;
-    if (params.indexOf('reasoning') >= 0) corpo.reasoning = { effort: 'low', exclude: true };
+    // em streaming o raciocínio também vem (separado do texto): mostra que o modelo está vivo enquanto pensa
+    if (params.indexOf('reasoning') >= 0) corpo.reasoning = opcoes.stream ? { effort: 'low' } : { effort: 'low', exclude: true };
     if (opcoes.json && (params.indexOf('response_format') >= 0 || params.indexOf('structured_outputs') >= 0)) corpo.response_format = { type: 'json_object' };
     const inicio = Date.now();
     const controle = new AbortController();
     const limite = opcoes.stream ? resta : Math.min(opcoes.timeoutMs || (NA_VERCEL ? 45000 : 90000), resta);
     const timer = setTimeout(function () { controle.abort(); }, limite);
     try {
-      const r = await fetch(URL_CHAT, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': process.env.FRONTEND_URL || 'https://licitafacil-one.vercel.app',
-          'X-Title': 'LicitaFacil'
-        },
-        body: JSON.stringify(corpo),
-        signal: controle.signal
+      const cabecalhos = gemini
+        ? { 'Authorization': 'Bearer ' + process.env.GEMINI_API_KEY, 'Content-Type': 'application/json' }
+        : { 'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY, 'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.FRONTEND_URL || 'https://licitafacil-one.vercel.app', 'X-Title': 'LicitaFacil' };
+      const r = await fetch(gemini ? BASE_GEMINI + '/chat/completions' : URL_CHAT, {
+        method: 'POST', headers: cabecalhos, body: JSON.stringify(corpo), signal: controle.signal
       });
-      if (r.status === 401 || r.status === 403) {
+      if (gemini && (r.status === 401 || r.status === 403 || (r.status === 400 && /api[_ ]?key/i.test(await r.clone().text().catch(function () { return ''; }))))) {
+        // chave do Gemini recusada: segue só com o OpenRouter por 10 minutos (sem derrubar a leitura)
+        estado.geminiDesligadoAte = Date.now() + 10 * 60000;
+        estado.geminiErro = 'chave do Gemini recusada (' + r.status + ')';
+        falhou(modelo, estado.geminiErro);
+        continue;
+      }
+      if (!gemini && (r.status === 401 || r.status === 403)) {
         ultimo = 'chave do OpenRouter recusada (' + r.status + ')';
+        motivos.push(ultimo);
         estado.ultimoErro = ultimo;
         estado.ultimoErroEm = new Date().toISOString();
-        throw erroIA('IA indisponível: ' + ultimo, 'CHAVE');
+        const eChave = erroIA('IA indisponível: ' + ultimo, 'CHAVE');
+        eChave.motivos = motivos;
+        throw eChave;
       }
       if (r.status === 429) {
         const corpoErro = await r.text().catch(function () { return ''; });
-        if (/per-day|per day|daily/i.test(corpoErro)) {
+        const diario = /per-day|per day|perday|daily|requests per day|RPD/i.test(corpoErro);
+        if (gemini) {
+          // limite do Gemini: por minuto (espera 1 min) ou do dia (deixa esse modelo de lado por 3 h)
+          pausar(modelo, diario ? 180 : 1);
+          if (diario) estado.geminiErro = 'limite diário do Gemini atingido (' + nomeCurto(modelo) + ')';
+          falhou(modelo, diario ? 'limite diário atingido' : 'limite por minuto (429)');
+          continue;
+        }
+        if (diario) {
           estado.cota = { restante: 0, limite: estado.cota && estado.cota.limite, em: new Date().toISOString() };
           estado.cotaEm = Date.now();
           ultimo = 'limite diário da IA gratuita atingido';
+          motivos.push(ultimo);
           estado.ultimoErro = ultimo;
           estado.ultimoErroEm = new Date().toISOString();
-          throw erroIA('IA indisponível: ' + ultimo, 'COTA');
+          const eCota = erroIA('IA indisponível: ' + ultimo, 'COTA');
+          eCota.motivos = motivos;
+          throw eCota;
         }
-        ultimo = modelo + ' ocupado (429)';
+        falhou(modelo, 'ocupado (429)');
         pausar(modelo, 2);
         continue;
       }
       if (!r.ok) {
-        ultimo = modelo + ' respondeu ' + r.status;
+        falhou(modelo, 'respondeu ' + r.status);
         pausarSeFalhou(modelo, tarefa, r.status >= 500 ? 5 : 15);
         continue;
       }
       let texto;
       let motivoFim;
       if (opcoes.stream) {
-        const lido = await lerStream(r, { controle: controle, prazoEm: prazo - 3000, paradoMs: opcoes.paradoMs || 90000 });
+        const lido = await lerStream(r, { controle: controle, prazoEm: prazo - 3000, paradoMs: opcoes.paradoMs || 90000, primeiroMs: opcoes.primeiroMs });
         texto = lido.texto;
         motivoFim = lido.cortado ? 'parcial' : lido.motivo;
         if (lido.erro && !texto) {
-          ultimo = modelo + ': ' + lido.erro.message;
+          falhou(modelo, lido.erro.message);
+          pausarSeFalhou(modelo, tarefa, 5);
+          continue;
+        }
+        if (!texto && lido.cortado) {
+          falhou(modelo, lido.cortado === 'sem_resposta' ? 'não começou a responder (fila do modelo gratuito)' : 'parou de responder');
           pausarSeFalhou(modelo, tarefa, 5);
           continue;
         }
@@ -258,26 +309,27 @@ async function chamarIA(mensagens, opcoes) {
         motivoFim = j && j.choices && j.choices[0] && j.choices[0].finish_reason;
       }
       if (!texto) {
-        ultimo = modelo + ' respondeu vazio' + (motivoFim ? ' (' + motivoFim + ')' : '');
+        falhou(modelo, 'respondeu vazio' + (motivoFim ? ' (' + motivoFim + ')' : ''));
         pausarSeFalhou(modelo, tarefa, 10);
         continue;
       }
       let valor = texto;
       if (opcoes.validar) {
         try { valor = opcoes.validar(texto); } catch (errV) {
-          ultimo = modelo + ': ' + errV.message + (motivoFim === 'parcial' ? ' (resposta incompleta no prazo)' : '');
+          falhou(modelo, errV.message + (motivoFim === 'parcial' ? ' (resposta incompleta no prazo)' : ''));
           pausarSeFalhou(modelo, tarefa, motivoFim === 'parcial' ? 3 : 5);
           continue;
         }
       }
       estado.bom[tarefa] = modelo;
       estado.ultimoSucesso = new Date().toISOString();
-      if (estado.cota && estado.cota.restante > 0) estado.cota.restante--;
+      if (gemini) { estado.geminiOk = estado.ultimoSucesso; estado.geminiErro = null; }
+      else if (estado.cota && estado.cota.restante > 0) estado.cota.restante--;
       // motivo "length" (limite de tokens) ou "parcial" (prazo): a resposta veio cortada (página com muitos produtos)
-      return { texto: texto, valor: valor, modelo: modelo, ms: Date.now() - inicio, tentados: tentados, motivo: motivoFim || null };
+      return { texto: texto, valor: valor, modelo: modelo, ms: Date.now() - inicio, tentados: tentados, motivo: motivoFim || null, motivos: motivos };
     } catch (err) {
       if (err.code === 'CHAVE' || err.code === 'COTA') throw err;
-      ultimo = modelo + ': ' + (err.name === 'AbortError' || err.name === 'TimeoutError' ? 'tempo esgotado' : err.message);
+      falhou(modelo, err.name === 'AbortError' || err.name === 'TimeoutError' ? 'tempo esgotado' : err.message);
       pausarSeFalhou(modelo, tarefa, err.name === 'AbortError' || err.name === 'TimeoutError' ? 3 : 5);
     } finally {
       clearTimeout(timer);
@@ -285,14 +337,22 @@ async function chamarIA(mensagens, opcoes) {
   }
   estado.ultimoErro = ultimo;
   estado.ultimoErroEm = new Date().toISOString();
+  estado.ultimosMotivos = motivos.slice(-8);
   const e = erroIA('IA indisponível: ' + ultimo, 'INDISPONIVEL');
   e.tentados = tentados;
+  e.motivos = motivos;
   throw e;
+}
+
+// Nome curto para mensagens: "google/gemma-4-31b-it:free" → "gemma-4-31b-it"; "gemini:gemini-flash-latest" → "Gemini gemini-flash-latest"
+function nomeCurto(modelo) {
+  if (ehGemini(modelo)) return 'Gemini ' + modelo.slice(PREFIXO_GEMINI.length);
+  return String(modelo).replace(/^[^/]+\//, '').replace(/:free$/, '');
 }
 
 // Quantas leituras gratuitas ainda restam hoje (OpenRouter: 50/dia sem créditos comprados; 1000/dia com)
 async function statusCota(forcar) {
-  if (!configurada()) return null;
+  if (!openrouterConfigurado()) return null;
   if (!forcar && estado.cotaEm && Date.now() - estado.cotaEm < 60000) return estado.cota;
   try {
     const r = await fetch(URL_CHAVE, { headers: { 'Authorization': 'Bearer ' + process.env.OPENROUTER_API_KEY }, signal: AbortSignal.timeout(8000) });
@@ -315,16 +375,22 @@ async function statusCota(forcar) {
   return estado.cota;
 }
 
+function geminiAtivo() { return geminiConfigurado() && !(estado.geminiDesligadoAte > Date.now()); }
+
 async function capacidades() {
   if (!configurada()) return { ia: false, visao: false, cota: null };
-  const modelos = await listarModelos();
+  const modelos = openrouterConfigurado() ? await listarModelos() : [];
   const cota = await statusCota();
+  const gemini = geminiAtivo();
   return {
     ia: true,
-    visao: modelos.some(function (m) { return m.imagem; }) || !modelos.length,
+    provedor: gemini ? 'gemini' : 'openrouter',
+    visao: gemini || modelos.some(function (m) { return m.imagem; }) || !modelos.length,
     modelos_texto: modelos.length,
     modelos_visao: modelos.filter(function (m) { return m.imagem; }).length,
-    cota: cota
+    // com o Gemini a leitura não depende da cota diária do OpenRouter (ela vira só reserva)
+    cota: gemini ? null : cota,
+    cota_openrouter: cota
   };
 }
 
@@ -338,7 +404,11 @@ function estadoIA() {
     ultimo_sucesso: estado.ultimoSucesso,
     ultimo_erro: estado.ultimoErro,
     ultimo_erro_em: estado.ultimoErroEm,
-    cota: estado.cota
+    ultimos_motivos: estado.ultimosMotivos || [],
+    cota: estado.cota,
+    gemini: { configurado: geminiConfigurado(), ativo: geminiAtivo(), modelos: geminiConfigurado() ? modelosGemini().map(nomeCurto) : [],
+      ultimo_sucesso: estado.geminiOk || null, ultimo_erro: estado.geminiErro || null },
+    openrouter: { configurado: openrouterConfigurado() }
   };
 }
 
@@ -461,7 +531,10 @@ const PROMPT_TEXTO = 'Você extrai dados de catálogos técnicos de fornecedores
 // Prazos da leitura de catálogo: na Vercel (Fluid compute) a função pode durar até 300 s; o streaming devolve o que
 // já chegou se o prazo acabar (o navegador pede o resto). Fora da Vercel (Render/local) o prazo é maior.
 const PRAZO_EXTRACAO = parseInt(process.env.IA_PRAZO_EXTRACAO_MS || (NA_VERCEL ? '270000' : '600000'), 10);
-const PARADO_EXTRACAO = parseInt(process.env.IA_PARADO_MS || '90000', 10);
+const PARADO_EXTRACAO = parseInt(process.env.IA_PARADO_MS || '60000', 10);
+// antes do primeiro sinal do modelo (fila do gratuito) a espera é maior
+const PRIMEIRO_EXTRACAO = parseInt(process.env.IA_PRIMEIRO_MS || '120000', 10);
+const TENTATIVAS_EXTRACAO = parseInt(process.env.IA_TENTATIVAS || '5', 10);
 
 function validarExtracao(texto) {
   const r = extrator.normalizarResultadoIA(texto);
@@ -486,7 +559,7 @@ async function extrairPagina(opcoes) {
   partes.push({ type: 'image_url', image_url: { url: opcoes.imagem } });
   const r = await chamarIA([{ role: 'system', content: PROMPT_VISAO }, { role: 'user', content: partes }], {
     tarefa: 'visao', json: true, maxTokens: 8192, temperatura: 0, validar: validarExtracao, stream: true,
-    prazoMs: PRAZO_EXTRACAO, paradoMs: PARADO_EXTRACAO, tentativas: 3, evitar: opcoes.evitar
+    prazoMs: PRAZO_EXTRACAO, paradoMs: PARADO_EXTRACAO, primeiroMs: PRIMEIRO_EXTRACAO, tentativas: TENTATIVAS_EXTRACAO, evitar: opcoes.evitar
   });
   const v = r.valor || {};
   const produtos = v.produtos || [];
@@ -516,7 +589,7 @@ async function estruturarTexto(texto, opcoes) {
     { role: 'user', content: pedido }
   ], {
     tarefa: 'texto', json: true, maxTokens: 8192, temperatura: 0, validar: validarExtracao, stream: true,
-    prazoMs: PRAZO_EXTRACAO, paradoMs: PARADO_EXTRACAO, tentativas: 3, evitar: opcoes.evitar
+    prazoMs: PRAZO_EXTRACAO, paradoMs: PARADO_EXTRACAO, primeiroMs: PRIMEIRO_EXTRACAO, tentativas: TENTATIVAS_EXTRACAO, evitar: opcoes.evitar
   });
   const v = r.valor || {};
   const produtos = v.produtos || [];

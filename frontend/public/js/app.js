@@ -33,7 +33,7 @@ var NOMES_PLANO = { trial: 'Teste grátis', mensal: 'Mensal', trimestral: 'Trime
 var ORIGENS = {
   texto_colado: 'Texto colado', pdf_navegador: 'PDF lido no navegador', ocr_navegador: 'PDF escaneado (OCR)',
   imagem_ocr: 'Foto (OCR)', pdf_servidor: 'PDF lido no servidor', reprocessado: 'Relido', ia: 'Organizado pela IA',
-  ia_visao: 'Lido pela IA (imagem das páginas)', ia_texto: 'Texto organizado pela IA'
+  ia_visao: 'Lido pela IA (imagem das páginas)', ia_texto: 'Texto organizado pela IA', manual: 'Cadastrados à mão'
 };
 var FORMATOS = { prompt_mestre: 'Prompt Mestre', json: 'JSON', tabela: 'Tabela', texto: 'Texto livre', ia: 'Organizado pela IA' };
 var IA_ATIVA = ['na_fila', 'estruturando'];
@@ -521,64 +521,103 @@ function cardResultadoProduto(p, re) {
       htmlContatos(p.fornecedor, { produto: p.nome + (p.codigo ? ' (cód. ' + p.codigo + ')' : '') }) + '</div>' +
     '</div>';
 }
-// Resumo para cotação: quais fornecedores cadastrados têm o produto buscado, com o contato de cada um.
-// A mensagem do WhatsApp/e-mail cita o produto mais parecido daquele fornecedor (ou o que foi buscado).
-function htmlQuemTem(lista, q, produtos) {
-  var melhor = {};
-  (produtos || []).forEach(function (p) {
-    var id = p.fornecedor && p.fornecedor.id;
-    if (id && !melhor[id]) melhor[id] = p.nome + (p.codigo ? ' (cód. ' + p.codigo + ')' : '');
-  });
-  return '<div class="quem-tem mb-4"><div class="secao-titulo"><h3>' + numero(lista.length) + ' ' +
-    plural(lista.length, 'fornecedor tem', 'fornecedores têm') + ' “' + esc(q) + '”</h3>' +
-    '<span class="contagem">contato direto para a cotação</span></div><div class="quem-tem-lista">' + lista.map(function (f) {
-      var exemplo = melhor[f.fornecedor_id] || '';
-      return '<div class="quem-tem-item"><div class="quem-tem-nome"><button type="button" class="link-btn nome" data-acao="ver-fornecedor" data-id="' + esc(f.fornecedor_id) + '">' +
-        esc(f.nome) + '</button><span class="badge badge-blue">' + numero(f.produtos_encontrados) + ' ' + plural(f.produtos_encontrados, 'produto', 'produtos') + '</span></div>' +
-        (exemplo ? '<div class="quem-tem-ex">' + esc(exemplo) + '</div>' : '') +
-        htmlContatos(f, { emailCurto: true, produto: exemplo || q }) + '</div>';
-    }).join('') + '</div></div>';
+// ─── Resultado da busca: primeiro QUEM TEM (por fornecedor, com contato), depois a comparação dos produtos ───
+// Medida, tensão e norma que ainda não aparecem no nome (sem repetir o que já está escrito)
+function resumoProdutoBusca(p) {
+  var nome = normalizar(p.nome).replace(/\s+/g, '');
+  return [p.bitola, p.tensao, p.norma].filter(function (v) {
+    return v && nome.indexOf(normalizar(v).replace(/\s+/g, '')) < 0;
+  }).join(' · ');
 }
-// Fornecedores cujo nome ou especialidade combinam com a busca (mesmo sem catálogo)
-function htmlRelacionados(lista, re, titulo) {
-  if (!lista.length) return '';
-  return '<div class="secao-titulo"><h3>' + esc(titulo) + '</h3><span class="contagem">' + lista.length + ' ' + plural(lista.length, 'fornecedor', 'fornecedores') + '</span></div>' +
-    '<div class="forn-grid mb-4">' + lista.map(function (f) {
-      var semCat = !f.total_catalogos;
-      return '<div class="forn-card"><div class="topo"><div class="nome">' + marcar(f.nome, re) + '</div>' +
-        (semCat ? '<span class="badge badge-yellow">sem catálogo</span>' : '<span class="badge badge-blue">' + numero(f.total_catalogos) + ' ' + plural(f.total_catalogos, 'catálogo', 'catálogos') + '</span>') + '</div>' +
-        (f.observacoes ? '<div class="trecho">' + marcar(f.observacoes, re) + '</div>' : '') +
-        htmlContatos(f, { compacto: false }) +
-        '<div class="flex gap-2" style="flex-wrap:wrap"><button type="button" class="btn btn-ghost btn-sm" data-acao="ver-fornecedor" data-id="' + esc(f.id) + '">' + ICONES.olho + 'Ver fornecedor</button>' +
-        (semCat ? '<button type="button" class="btn btn-secondary btn-sm" data-acao="adicionar-catalogo" data-id="' + esc(f.id) + '">' + ICONES.enviar + 'Adicionar catálogo</button>' : '') + '</div></div>';
-    }).join('') + '</div>';
+function seloRelevancia(item) {
+  return '<span class="rel rel-' + esc(item.relevancia) + '" title="Quanto combina com a busca">' + esc(item.score) + '%</span>';
+}
+// Uma linha por fornecedor: nome, o que ele tem (até 3 produtos ou o trecho do catálogo) e o contato direto
+function htmlLinhaFornecedor(f, q, prods, re) {
+  var id = f.fornecedor_id || f.id;
+  var exemplo = prods[0] ? prods[0].nome + (prods[0].codigo ? ' (cód. ' + prods[0].codigo + ')' : '') : '';
+  var selo;
+  var corpo = '';
+  if (f.produtos_encontrados > 0) {
+    selo = '<span class="badge badge-blue">' + numero(f.produtos_encontrados) + ' ' + plural(f.produtos_encontrados, 'produto', 'produtos') + '</span>';
+    var mostrados = prods.slice(0, 3);
+    corpo = '<ul class="rf-prods">' + mostrados.map(function (p) {
+      var r = resumoProdutoBusca(p);
+      return '<li><span class="rf-prod-nome">' + marcar(p.nome, re) + '</span>' +
+        (p.codigo ? '<span class="cod">' + marcar(p.codigo, re) + '</span>' : '') +
+        (r ? '<span class="rf-spec">' + marcar(r, re) + '</span>' : '') +
+        (p.preco ? '<span class="rf-preco">' + esc(p.preco) + (p.unidade ? ' / ' + esc(p.unidade) : '') + '</span>' : '') + '</li>';
+    }).join('') + '</ul>';
+    var resto = f.produtos_encontrados - mostrados.length;
+    if (resto > 0) {
+      corpo += '<button type="button" class="link-btn rf-mais" data-acao="ver-fornecedor" data-id="' + esc(id) + '">+ ' + numero(resto) + ' ' +
+        plural(resto, 'outro produto', 'outros produtos') + ' deste fornecedor</button>';
+    }
+  } else if (f.trecho) {
+    selo = '<span class="badge badge-yellow">citado no catálogo</span>';
+    corpo = '<p class="rf-trecho">' + marcar(String(f.trecho).replace(/\s*\n\s*/g, ' · '), re) + '</p>' +
+      (f.nome_arquivo ? '<div class="rf-arquivo">' + esc(f.nome_arquivo) + '</div>' : '');
+  } else {
+    var semCat = !f.total_catalogos;
+    selo = semCat ? '<span class="badge badge-yellow">sem catálogo</span>'
+      : '<span class="badge badge-blue">' + numero(f.total_catalogos) + ' ' + plural(f.total_catalogos, 'catálogo', 'catálogos') + '</span>';
+    corpo = f.observacoes ? '<p class="rf-trecho">' + marcar(f.observacoes, re) + '</p>' : '';
+  }
+  var acoes = '';
+  if (!f.produtos_encontrados && !f.trecho && !f.total_catalogos) {
+    acoes = '<button type="button" class="btn btn-secondary btn-sm" data-acao="adicionar-catalogo" data-id="' + esc(id) + '">' + ICONES.enviar + 'Adicionar catálogo</button>';
+  }
+  return '<li class="res-forn-item">' +
+    '<div class="rf-info"><div class="rf-topo"><button type="button" class="link-btn rf-nome" data-acao="ver-fornecedor" data-id="' + esc(id) + '">' + esc(f.nome) + '</button>' +
+      selo + (f.relevancia && f.score != null && (f.produtos_encontrados || f.trecho) ? seloRelevancia(f) : '') + '</div>' + corpo + '</div>' +
+    '<div class="rf-lado">' + htmlContatos(f, { emailCurto: true, produto: exemplo || q }) + acoes + '</div>' +
+    '</li>';
+}
+function htmlListaFornecedores(lista, q, porForn, re) {
+  return '<ul class="res-forn">' + lista.map(function (f) {
+    return htmlLinhaFornecedor(f, q, porForn[f.fornecedor_id || f.id] || [], re);
+  }).join('') + '</ul>';
 }
 function renderResultados(r, q) {
   var re = criarDestaque(q);
   var produtos = r.produtos || [];
-  var trechos = (r.fornecedores || []).filter(function (f) { return f.trecho && !f.produtos_encontrados; });
+  var porForn = {};
+  produtos.forEach(function (p) {
+    var id = p.fornecedor && p.fornecedor.id;
+    if (id) (porForn[id] = porForn[id] || []).push(p);
+  });
+  var comProduto = (r.fornecedores || []).filter(function (f) { return f.produtos_encontrados > 0; });
+  var citados = (r.fornecedores || []).filter(function (f) { return !f.produtos_encontrados && f.trecho; });
   var jaMostrados = {};
   (r.fornecedores || []).forEach(function (f) { jaMostrados[f.fornecedor_id] = 1; });
   var relacionados = (r.fornecedores_relacionados || []).filter(function (f) { return !jaMostrados[f.id]; });
-  if (!produtos.length && !trechos.length) {
+  if (!produtos.length && !citados.length && !comProduto.length) {
     if (relacionados.length) {
-      html('resultados', '<div class="fade-in"><div class="banner info mb-4"><span>Nenhum catálogo cadastrado cita “' + esc(q) +
-        '”, mas estes fornecedores trabalham com isso. Adicione o catálogo deles para ver produtos, medidas e preços.</span></div>' +
-        htmlRelacionados(relacionados, re, 'Fornecedores que trabalham com isso') + '</div>');
+      html('resultados', '<div class="fade-in"><div class="banner info mb-4"><span>Nenhum fornecedor cadastrado tem “' + esc(q) +
+        '” no catálogo, mas estes trabalham com isso. Adicione o catálogo deles (ou cadastre o produto à mão) para ver medidas e preços.</span></div>' +
+        '<div class="secao-titulo"><h3>Fornecedores do ramo</h3><span class="contagem">' + numero(relacionados.length) + ' ' + plural(relacionados.length, 'fornecedor', 'fornecedores') + '</span></div>' +
+        htmlListaFornecedores(relacionados, q, {}, re) + '</div>');
       return;
     }
-    var semCatalogo = ESTADO.stats && ESTADO.stats.total_catalogos === 0;
+    var semCatalogo = ESTADO.stats && ESTADO.stats.total_catalogos === 0 && !ESTADO.stats.total_produtos;
     html('resultados', caixaVazia(ICONES.busca, semCatalogo ? 'Ainda não há catálogos para buscar' : 'Nenhum fornecedor cadastrado tem “' + q + '”',
-      semCatalogo ? 'Importe o catálogo de um fornecedor e a busca passa a encontrar os produtos dele.'
+      semCatalogo ? 'Importe o catálogo de um fornecedor (ou cadastre os produtos à mão) e a busca passa a encontrar os produtos dele.'
         : 'Tente só a medida (ex.: <strong>2,5mm</strong>), só a norma ou só o código. Confira também se o catálogo do fornecedor já foi importado.',
       '<button type="button" class="btn btn-primary" data-acao="ir" data-secao="importar">' + ICONES.enviar + 'Importar catálogo</button>'));
     return;
   }
   var partes = [];
-  var comProduto = (r.fornecedores || []).filter(function (f) { return f.produtos_encontrados > 0; });
-  if (comProduto.length) partes.push(htmlQuemTem(comProduto, q, produtos));
+  if (comProduto.length) {
+    partes.push('<div class="quem-tem mb-4"><div class="secao-titulo"><h3>' + numero(comProduto.length) + ' ' +
+      plural(comProduto.length, 'fornecedor tem', 'fornecedores têm') + ' “' + esc(q) + '”</h3>' +
+      '<span class="contagem">contato direto para a cotação</span></div>' + htmlListaFornecedores(comProduto, q, porForn, re) + '</div>');
+  }
+  if (citados.length) {
+    partes.push('<div class="mb-4"><div class="secao-titulo"><h3>' + (comProduto.length ? 'Também citam “' + esc(q) + '” no catálogo' : 'Citado nos catálogos de') +
+      '</h3><span class="contagem">texto do catálogo, sem produto organizado</span></div>' + htmlListaFornecedores(citados, q, {}, re) + '</div>');
+  }
   if (produtos.length) {
-    partes.push('<div class="secao-titulo"><h3>Produtos encontrados</h3><span class="contagem">' +
+    partes.push('<div class="secao-titulo"><h3>Comparar produtos</h3><span class="contagem">' +
       (r.total_produtos > produtos.length ? 'mostrando ' + produtos.length + ' de ' + numero(r.total_produtos) : numero(produtos.length) + ' ' + plural(produtos.length, 'produto', 'produtos')) +
       '</span></div>');
     partes.push('<div class="tabela-produtos-wrap mb-4"><div class="table-wrap"><table class="tabela"><caption class="sr-only">Produtos encontrados para ' + esc(q) + '</caption>' +
@@ -586,18 +625,10 @@ function renderResultados(r, q) {
       produtos.map(function (p) { return linhaResultadoProduto(p, re); }).join('') + '</tbody></table></div>' +
       '<div class="lista-cards">' + produtos.map(function (p) { return cardResultadoProduto(p, re); }).join('') + '</div></div>');
   }
-  if (trechos.length) {
-    partes.push('<div class="secao-titulo"><h3>' + (produtos.length ? 'Também citado nos catálogos' : 'Encontrado nos catálogos') + '</h3><span class="contagem">' +
-      trechos.length + ' ' + plural(trechos.length, 'fornecedor', 'fornecedores') + '</span></div>');
-    partes.push('<div class="forn-grid">' + trechos.map(function (f) {
-      return '<div class="forn-card"><div class="topo"><div class="nome">' + esc(f.nome) + '</div><span class="rel rel-' + esc(f.relevancia) + '">' + esc(f.score) + '%</span></div>' +
-        '<div class="trecho">' + marcar(f.trecho, re) + '</div>' +
-        (f.nome_arquivo ? '<div class="text-sm text-muted">' + ICONES.arquivo.replace('<svg ', '<svg width="14" height="14" style="display:inline;vertical-align:-2px;margin-right:4px" ') + esc(f.nome_arquivo) + '</div>' : '') +
-        htmlContatos(f, { compacto: false }) +
-        '<div><button type="button" class="btn btn-ghost btn-sm" data-acao="ver-fornecedor" data-id="' + esc(f.fornecedor_id) + '">' + ICONES.olho + 'Ver fornecedor</button></div></div>';
-    }).join('') + '</div>');
+  if (relacionados.length) {
+    partes.push('<div class="secao-titulo"><h3>Outros fornecedores do ramo</h3><span class="contagem">' + numero(relacionados.length) + ' ' +
+      plural(relacionados.length, 'fornecedor', 'fornecedores') + '</span></div>' + htmlListaFornecedores(relacionados, q, {}, re));
   }
-  if (relacionados.length) partes.push(htmlRelacionados(relacionados, re, 'Outros fornecedores que trabalham com isso'));
   html('resultados', '<div class="fade-in">' + partes.join('') + '</div>');
 }
 
@@ -865,12 +896,7 @@ function carregarProdutos() {
   if (!f) return Promise.resolve();
   return apiGet('/api/fornecedores/' + f.id + '/produtos').then(function (r) {
     if (!ESTADO.fornecedor || ESTADO.fornecedor.id !== f.id) return;
-    ESTADO.produtos = (r.produtos || []).map(function (p) {
-      var at = p.atributos || {};
-      p._busca = normalizar(CAMPOS_PRODUTO.map(function (c) { return p[c[0]] || ''; }).join(' ') + ' ' +
-        Object.keys(at).map(function (k) { return k + ' ' + at[k]; }).join(' '));
-      return p;
-    });
+    ESTADO.produtos = (r.produtos || []).map(prepararProduto);
     ESTADO.produtosLimite = 200;
     $('badge-produtos').textContent = numero(ESTADO.produtos.length);
     renderProdutos();
@@ -879,6 +905,12 @@ function carregarProdutos() {
     html('produtos-vazio', caixaErro(msgErro(err, 'Não foi possível carregar os produtos.'), 'recarregar-detalhe'));
     mostrar('produtos-vazio', true);
   });
+}
+function prepararProduto(p) {
+  var at = p.atributos || {};
+  p._busca = normalizar(CAMPOS_PRODUTO.map(function (c) { return p[c[0]] || ''; }).join(' ') + ' ' +
+    Object.keys(at).map(function (k) { return k + ' ' + at[k]; }).join(' '));
+  return p;
 }
 function filtrarProdutos() {
   var termos = normalizar(valor('filtro-produtos')).split(' ').filter(Boolean);
@@ -901,6 +933,7 @@ function renderProdutos() {
     html('produtos-vazio', caixaVazia(processando ? '<span class="spinner spinner-lg"></span>' : ICONES.caixa,
       processando ? 'Organizando os produtos…' : 'Nenhum produto organizado ainda', texto,
       '<button type="button" class="btn btn-primary" data-acao="aba" data-aba="adicionar">' + ICONES.enviar + 'Adicionar catálogo</button>' +
+      '<button type="button" class="btn btn-secondary" data-acao="novo-produto">' + ICONES.mais + 'Cadastrar produto à mão</button>' +
       (comTexto ? '<button type="button" class="btn btn-secondary" data-acao="aba" data-aba="catalogos">Ver catálogos</button>' : '')));
     mostrar('produtos-vazio', true);
     return;
@@ -930,7 +963,8 @@ function renderProdutos() {
       '<td>' + (p.material ? marcar(p.material, re) : vazio()) + '</td>' +
       '<td>' + (p.norma ? '<span class="norma">' + marcar(p.norma, re) + '</span>' : vazio()) + '</td>' +
       '<td class="num">' + (p.preco ? '<div class="preco">' + esc(p.preco) + '</div>' : '') + (p.unidade ? '<div class="unid">' + esc(p.unidade) + '</div>' : '') + (!p.preco && !p.unidade ? vazio() : '') + '</td>' +
-      '<td class="acoes"><button type="button" class="btn btn-ghost btn-sm" data-acao="detalhes-produto" data-pid="' + esc(p.id) + '" aria-expanded="false">Detalhes</button></td>' +
+      '<td class="acoes"><button type="button" class="btn btn-ghost btn-sm" data-acao="detalhes-produto" data-pid="' + esc(p.id) + '" aria-expanded="false">Detalhes</button>' +
+        botoesProduto(p) + '</td>' +
       '</tr>';
   }).join(''));
   html('cards-produtos', visiveis.map(function (p) {
@@ -938,7 +972,8 @@ function renderProdutos() {
     return '<div class="p-card"><div class="topo"><div><div class="prod-nome">' + marcar(p.nome, re) + '</div>' + (p.codigo ? '<span class="cod">' + marcar(p.codigo, re) + '</span>' : '') + '</div>' +
       (p.preco ? '<div class="num"><div class="preco">' + esc(p.preco) + '</div><div class="unid">' + esc(p.unidade || '') + '</div></div>' : '') + '</div>' +
       (specs ? '<div class="specs">' + specs + '</div>' : '') +
-      '<details><summary>Ver todos os dados</summary>' + detalhesProdutoHTML(p) + '</details></div>';
+      '<details><summary>Ver todos os dados</summary>' + detalhesProdutoHTML(p) + '</details>' +
+      '<div class="p-card-acoes">' + botoesProduto(p, true) + '</div></div>';
   }).join(''));
   var resto = lista.length - visiveis.length;
   html('produtos-mais', resto > 0 ? '<button type="button" class="btn btn-secondary btn-full" data-acao="mais-produtos">Mostrar mais ' +
@@ -965,6 +1000,116 @@ function alternarDetalhesProduto(botao) {
   botao.setAttribute('aria-expanded', 'true');
   botao.textContent = 'Fechar';
 }
+// ─── Produto cadastrado à mão (e correção do que a IA leu) ─────────
+var CAMPOS_FORM_PRODUTO = ['nome', 'codigo', 'bitola', 'tensao', 'marca', 'preco', 'unidade', 'categoria', 'norma',
+  'material', 'isolamento', 'cobertura', 'temperatura', 'aplicacao', 'certificacoes', 'descricao'];
+var CAMPOS_MAIS_DADOS = ['material', 'isolamento', 'cobertura', 'temperatura', 'aplicacao', 'certificacoes', 'descricao'];
+
+function botoesProduto(p, comTexto) {
+  return '<button type="button" class="btn btn-ghost btn-sm' + (comTexto ? '' : ' btn-icon') + '" data-acao="editar-produto" data-pid="' + esc(p.id) + '" aria-label="Editar ' + esc(p.nome) + '" title="Editar">' +
+      ICONES.editar + (comTexto ? 'Editar' : '') + '</button>' +
+    '<button type="button" class="btn btn-ghost btn-sm' + (comTexto ? '' : ' btn-icon') + ' btn-perigo-texto" data-acao="excluir-produto" data-pid="' + esc(p.id) + '" aria-label="Excluir ' + esc(p.nome) + '" title="Excluir">' +
+      ICONES.lixo + (comTexto ? 'Excluir' : '') + '</button>';
+}
+function acharProduto(pid) {
+  for (var i = 0; i < ESTADO.produtos.length; i++) if (String(ESTADO.produtos[i].id) === String(pid)) return ESTADO.produtos[i];
+  return null;
+}
+// "Rótulo: valor" por linha ⇄ atributos
+function atributosParaTexto(at) {
+  at = at || {};
+  return Object.keys(at).map(function (k) { return k + ': ' + at[k]; }).join('\n');
+}
+function textoParaAtributos(t) {
+  var at = {};
+  var soltos = [];
+  String(t || '').split(/\r?\n/).forEach(function (linha) {
+    linha = linha.trim();
+    if (!linha) return;
+    var i = linha.indexOf(':');
+    if (i > 0 && i < 80 && linha.slice(i + 1).trim()) at[linha.slice(0, i).trim()] = linha.slice(i + 1).trim();
+    else soltos.push(linha);
+  });
+  if (soltos.length) at['Observação'] = soltos.join('; ');
+  return at;
+}
+function abrirModalProduto(pid) {
+  var f = ESTADO.fornecedor;
+  if (!f) return;
+  var p = pid ? acharProduto(pid) : null;
+  if (pid && !p) { showToast('Produto não encontrado. Atualize a página.', 'error'); return; }
+  $('modal-produto-titulo').textContent = p ? 'Editar produto' : 'Novo produto';
+  $('prod-fornecedor').textContent = (p ? 'Fornecedor: ' : 'Será cadastrado em: ') + f.nome + (p && p.nome_arquivo ? ' · ' + p.nome_arquivo : '');
+  $('prod-id').value = p ? p.id : '';
+  CAMPOS_FORM_PRODUTO.forEach(function (c) { $('prod-' + c).value = p ? (p[c] || '') : ''; });
+  $('prod-atributos').value = p ? atributosParaTexto(p.atributos) : '';
+  // "mais dados" abre sozinho quando o produto já tem algum deles
+  $('prod-mais').open = !!(p && (CAMPOS_MAIS_DADOS.some(function (c) { return p[c]; }) || Object.keys(p.atributos || {}).length));
+  mostrar('btn-produto-outro', !p);
+  $('btn-salvar-produto').textContent = p ? 'Salvar alterações' : 'Salvar produto';
+  mostrar('prod-erro', false);
+  openModal('modal-produto');
+}
+function salvarProdutoManual(e, outro) {
+  if (e) e.preventDefault();
+  var f = ESTADO.fornecedor;
+  if (!f) return;
+  var pid = valor('prod-id');
+  var dados = {};
+  CAMPOS_FORM_PRODUTO.forEach(function (c) { dados[c] = valor('prod-' + c).trim(); });
+  dados.atributos = textoParaAtributos(valor('prod-atributos'));
+  var erroEl = $('prod-erro');
+  if (!dados.nome) {
+    erroEl.textContent = 'Informe o nome do produto.';
+    mostrar(erroEl, true);
+    $('prod-nome').focus();
+    return;
+  }
+  mostrar(erroEl, false);
+  var btn = outro ? $('btn-produto-outro') : $('btn-salvar-produto');
+  setLoading(btn, true, 'Salvando…');
+  var req = pid ? apiPut('/api/fornecedores/' + f.id + '/produtos/' + pid, dados) : apiPost('/api/fornecedores/' + f.id + '/produtos', dados);
+  req.then(function (r) {
+    setLoading(btn, false);
+    var prod = prepararProduto(r.produto);
+    var i = -1;
+    for (var k = 0; k < ESTADO.produtos.length; k++) if (String(ESTADO.produtos[k].id) === String(prod.id)) { i = k; break; }
+    if (i >= 0) ESTADO.produtos[i] = prod; else ESTADO.produtos.unshift(prod);
+    $('badge-produtos').textContent = numero(ESTADO.produtos.length);
+    renderProdutos();
+    carregarStats();
+    if (outro) {
+      // mantém família, marca, categoria, tensão, norma e unidade: só muda o que varia de um item para o outro
+      ['nome', 'codigo', 'bitola', 'preco'].forEach(function (c) { $('prod-' + c).value = ''; });
+      $('prod-nome').focus();
+      showToast('“' + prod.nome + '” salvo. Pode cadastrar o próximo.', 'success');
+    } else {
+      closeModal('modal-produto');
+      showToast(pid ? 'Produto atualizado.' : 'Produto cadastrado e pronto para a busca.', 'success');
+    }
+    carregarDetalhe(f.id, { silencioso: true });
+  }).catch(function (err) {
+    setLoading(btn, false);
+    erroEl.textContent = msgErro(err, 'Não foi possível salvar o produto.');
+    mostrar(erroEl, true);
+  });
+}
+function pedirExclusaoProduto(pid) {
+  var f = ESTADO.fornecedor;
+  var p = acharProduto(pid);
+  if (!f || !p) return;
+  confirmar('Excluir produto', 'Excluir “' + p.nome + '”? Ele deixa de aparecer na busca.', 'Excluir produto', function () {
+    return apiDelete('/api/fornecedores/' + f.id + '/produtos/' + pid).then(function () {
+      ESTADO.produtos = ESTADO.produtos.filter(function (x) { return String(x.id) !== String(pid); });
+      $('badge-produtos').textContent = numero(ESTADO.produtos.length);
+      renderProdutos();
+      carregarStats();
+      carregarDetalhe(f.id, { silencioso: true });
+      showToast('Produto excluído.', 'success');
+    });
+  });
+}
+
 function celulaCSV(v) {
   var s = String(v == null ? '' : v).replace(/\r?\n/g, ' ');
   if (/^[=@]/.test(s) || /^[+\-][^\d\s]/.test(s)) s = "'" + s;
@@ -1006,7 +1151,7 @@ function renderCatalogos() {
     meta.push(ORIGENS[c.origem] || 'Envio antigo');
     if (c.formato && FORMATOS[c.formato]) meta.push('formato ' + FORMATOS[c.formato]);
     meta.push(numero(c.total_produtos || c.produtos_gravados || 0) + ' ' + plural(c.total_produtos || c.produtos_gravados || 0, 'produto', 'produtos'));
-    meta.push(numero(c.total_chunks || 0) + ' ' + plural(c.total_chunks || 0, 'trecho', 'trechos') + ' na busca');
+    if (c.origem !== 'manual') meta.push(numero(c.total_chunks || 0) + ' ' + plural(c.total_chunks || 0, 'trecho', 'trechos') + ' na busca');
     var iaAtiva = IA_ATIVA.indexOf(c.ia_status) >= 0;
     var org = ESTADO.organizando && String(ESTADO.organizando.cid) === String(c.id) ? ESTADO.organizando : null;
     var ia = org ? htmlProgressoOrganizar(org)
@@ -1020,7 +1165,7 @@ function renderCatalogos() {
       textoStatusCatalogo(c) +
       '<div class="cat-acoes">' +
         (podeOrganizar ? '<button type="button" class="btn btn-primary btn-sm" data-acao="estruturar" data-cid="' + esc(c.id) + '">' + ICONES.ia + 'Organizar com IA</button>' : '') +
-        (c.status === 'processado' ? '<button type="button" class="btn btn-secondary btn-sm" data-acao="reprocessar" data-cid="' + esc(c.id) + '" title="Ler de novo o texto salvo deste catálogo">' + ICONES.reler + 'Reler</button>' : '') +
+        (c.status === 'processado' && c.origem !== 'manual' ? '<button type="button" class="btn btn-secondary btn-sm" data-acao="reprocessar" data-cid="' + esc(c.id) + '" title="Ler de novo o texto salvo deste catálogo">' + ICONES.reler + 'Reler</button>' : '') +
         '<button type="button" class="btn btn-danger btn-sm" data-acao="excluir-catalogo" data-cid="' + esc(c.id) + '">' + ICONES.lixo + 'Excluir</button>' +
       '</div></div>';
   }).join(''));
@@ -1197,7 +1342,7 @@ function htmlCapacidades(c) {
   var resta = restanteIA(c);
   if (!c.ia) return '<div class="cap-linha alerta">' + ICONES.alerta + '<span>A IA não está configurada: a leitura usa OCR e os produtos não são organizados sozinhos.</span></div>';
   if (resta === 0) return '<div class="cap-linha alerta">' + ICONES.alerta + '<span>A cota gratuita de IA de hoje acabou. Ela renova às 21h (Brasília). Dá para ler agora sem IA, mas a qualidade é bem menor.</span></div>';
-  return '<div class="cap-linha ok">' + ICONES.ia + '<span><strong>Leitura com IA ativa:</strong> ' +
+  return '<div class="cap-linha ok">' + ICONES.ia + '<span><strong>Leitura com IA ativa' + (c.provedor === 'gemini' ? ' (Google Gemini)' : '') + ':</strong> ' +
     (c.visao ? 'a IA lê a imagem de cada página (tabelas, PDFs escaneados e fotos).' : 'a IA organiza o texto das páginas.') +
     (resta != null ? ' Restam <strong>' + numero(resta) + '</strong> leituras gratuitas hoje (1 por página).' : '') + '</span></div>';
 }
@@ -1546,6 +1691,21 @@ function paginasComProblema(imp) {
     return p.estado === 'erro' || p.parcial || (imp.usarIA && p.estado === 'sem_ia' && p.metodo !== 'ia_texto');
   });
 }
+// Por que a IA não leu: resume os motivos que o servidor devolveu (modelos ocupados, sem resposta, cota…)
+function motivoFalhaIA(lista) {
+  var t = [];
+  lista.forEach(function (p) { (p.motivosIA || []).forEach(function (m) { t.push(String(m)); }); });
+  if (!t.length) return '';
+  t = t.join(' | ');
+  if (/limite diário/i.test(t) && !/Gemini/i.test(t)) return 'o limite diário da IA gratuita acabou';
+  if (/chave/i.test(t)) return 'a chave da IA foi recusada (confira no Painel do dono)';
+  var ocupado = /429|ocupad|limite por minuto/i.test(t);
+  var lento = /não começou|parou de responder|tempo esgotado/i.test(t);
+  if (ocupado && lento) return 'os modelos gratuitos estavam congestionados (ocupados ou sem responder)';
+  if (ocupado) return 'os modelos gratuitos estavam ocupados (muita gente usando agora)';
+  if (lento) return 'os modelos gratuitos demoraram demais para responder';
+  return 'a IA não devolveu os produtos no formato esperado';
+}
 function listaPaginas(lista) {
   return lista.slice(0, 12).map(function (p) { return p.n; }).join(', ') + (lista.length > 12 ? '…' : '');
 }
@@ -1559,7 +1719,11 @@ function renderRevisao(imp) {
   var parciais = problemas.filter(function (p) { return p.parcial; });
   var podeReler = problemas.length && imp.usarIA && imp.doc && !(imp.sessao && imp.sessao.estado.cotaAcabou);
   var avisos = [];
-  if (naoLidas.length) avisos.push(numero(naoLidas.length) + ' ' + plural(naoLidas.length, 'página não foi lida', 'páginas não foram lidas') + ' pela IA (' + listaPaginas(naoLidas) + ').');
+  if (naoLidas.length) {
+    var motivo = motivoFalhaIA(naoLidas);
+    avisos.push(numero(naoLidas.length) + ' ' + plural(naoLidas.length, 'página não foi lida', 'páginas não foram lidas') + ' pela IA (' + listaPaginas(naoLidas) + ').' +
+      (motivo ? ' Motivo: ' + motivo + '.' : ''));
+  }
   if (parciais.length) avisos.push(numero(parciais.length) + ' ' + plural(parciais.length, 'página tinha', 'páginas tinham') + ' produtos demais e ' +
     plural(parciais.length, 'pode ter ficado incompleta', 'podem ter ficado incompletas') + ' (' + listaPaginas(parciais) + ').');
   var nProd = res.produtos.length;
@@ -1984,19 +2148,25 @@ function renderAdminDiagnostico(d) {
   var rls = (d.banco && d.banco.rls) || [];
   var semRls = rls.filter(function (t) { return !t.relrowsecurity; }).map(function (t) { return t.relname; });
   var ia = d.ia || {};
-  var iaTxt = !ia.configurada ? '<span style="color:var(--warning)">sem chave do OpenRouter</span>'
+  var iaTxt = !(ia.openrouter ? ia.openrouter.configurado : ia.configurada) ? '<span style="color:var(--warning)">sem chave do OpenRouter</span>'
     : ia.teste ? (ia.teste.ok ? '<span class="text-ok">respondeu (' + esc(ia.teste.modelo) + ')</span>' : '<span style="color:var(--danger)">' + esc(ia.teste.erro) + '</span>')
       : (ia.ultimo_sucesso ? '<span class="text-ok">funcionando</span>' + (ia.modelo_atual ? ' · ' + esc(ia.modelo_atual) : '') : 'configurada (clique em Testar a IA)');
   html('adm-diagnostico', '<div class="diag-lista">' +
     linha('API', ok + ' · versão ' + esc(d.versao) + ' · Node ' + esc(d.node)) +
     linha('Banco de dados', d.banco && d.banco.ok ? ok + ' · ' + esc(d.banco.ms) + ' ms' : '<span style="color:var(--danger)">fora do ar</span>') +
     linha('Proteção das tabelas (RLS)', !rls.length ? '—' : (semRls.length ? '<span style="color:var(--warning)">desligada em ' + esc(semRls.join(', ')) + '</span>' : '<span class="text-ok">ligada em ' + rls.length + ' tabelas</span>')) +
+    linha('Google Gemini (leitura principal)', ia.gemini && ia.gemini.configurado
+      ? (ia.gemini.ativo ? '<span class="text-ok">ligado</span>' + (ia.gemini.ultimo_sucesso ? ' · funcionando' : '') + ' · ' + esc((ia.gemini.modelos || []).join(', '))
+        : '<span style="color:var(--warning)">' + esc(ia.gemini.ultimo_erro || 'chave recusada') + '</span>')
+      : '<span style="color:var(--warning)">sem chave</span> <span class="text-sm text-muted">(chave grátis em aistudio.google.com → Get API key; ' +
+        'na Vercel: Settings → Environment Variables → GEMINI_API_KEY)</span>') +
     linha('IA (OpenRouter)', iaTxt) +
     (ia.configurada ? linha('Leitura de páginas pela IA', ia.visao ? ok + ' · ' + esc(ia.modelos_visao) + ' modelos gratuitos de imagem' + (ia.modelo_visao ? ' · ' + esc(ia.modelo_visao) : '')
       : '<span style="color:var(--warning)">nenhum modelo gratuito de imagem disponível agora</span>') : '') +
     (ia.cota && ia.cota.limite ? linha('Cota gratuita de hoje', esc(numero(ia.cota.restante)) + ' de ' + esc(numero(ia.cota.limite)) + ' leituras restantes' +
       (ia.cota.limite <= 50 ? ' <span class="text-sm text-muted">(com US$ 10 em créditos no OpenRouter sobe para 1.000 por dia)</span>' : '')) : '') +
     (ia.ultimo_erro ? linha('Último erro da IA', '<span class="text-sm">' + esc(ia.ultimo_erro) + '</span>') : '') +
+    (ia.ultimos_motivos && ia.ultimos_motivos.length ? linha('Tentativas da última falha', '<span class="text-sm">' + esc(ia.ultimos_motivos.join(' · ')) + '</span>') : '') +
     linha('E-mail de recuperação de senha', d.email && d.email.configurado ? ok : '<span style="color:var(--warning)">não configurado</span>') +
     linha('Administradores configurados', esc(d.admin_emails)) +
     '</div>');
@@ -2133,6 +2303,10 @@ function aoClicar(e) {
       break;
     case 'adicionar-catalogo': navegar('fornecedor/' + id + '/adicionar'); break;
     case 'detalhes-produto': alternarDetalhesProduto(el); break;
+    case 'novo-produto': abrirModalProduto(null); break;
+    case 'editar-produto': abrirModalProduto(el.getAttribute('data-pid')); break;
+    case 'excluir-produto': pedirExclusaoProduto(el.getAttribute('data-pid')); break;
+    case 'salvar-produto-outro': salvarProdutoManual(null, true); break;
     case 'mais-produtos': ESTADO.produtosLimite += 200; renderProdutos(); break;
     case 'exportar-produtos': exportarProdutosCSV(); break;
     case 'reprocessar': reprocessarCatalogo(cid, el); break;
@@ -2152,6 +2326,7 @@ function aoClicar(e) {
     case 'admin-link-senha': gerarLinkSenha(id, el); break;
     case 'copiar-campo': copiarCampo(el.getAttribute('data-alvo')); break;
     case 'tentar-de-novo': window.location.reload(); break;
+    case 'atualizar-versao': window.location.reload(); break;
     default: break;
   }
 }
@@ -2186,6 +2361,8 @@ function ligarEventos() {
   $('filtro-fornecedores').addEventListener('input', debounce(renderFornecedores, 120));
   $('filtro-produtos').addEventListener('input', debounce(function () { ESTADO.produtosLimite = 200; renderProdutos(); }, 150));
   $('form-fornecedor').addEventListener('submit', salvarFornecedor);
+  $('form-produto').addEventListener('submit', function (e) { salvarProdutoManual(e, false); });
+  $('prod-nome').addEventListener('input', function () { mostrar('prod-erro', false); });
   $('form-perfil').addEventListener('submit', salvarPerfil);
   $('form-aviso-pagamento').addEventListener('submit', avisarPagamento);
   $('colar-texto').addEventListener('input', debounce(atualizarContadorColado, 200));
@@ -2220,6 +2397,30 @@ window.addEventListener('error', function (ev) {
   document.body.appendChild(box);
 });
 
+// ─── Versão nova publicada: avisa para atualizar (a tela aberta há horas continua com o código antigo) ───
+var VERSAO_APP = '3.4.0'; // igual ao ?v= dos arquivos e à versão da API (conferido pelo teste testes/versao.test.js)
+function compararVersao(a, b) {
+  var x = String(a || '0').split('.'), y = String(b || '0').split('.');
+  for (var i = 0; i < 3; i++) {
+    var d = (parseInt(x[i], 10) || 0) - (parseInt(y[i], 10) || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+function verificarVersaoNova() {
+  if (ESTADO.versaoNova || API_URL !== '') return; // só com a API do mesmo domínio (mesma publicação do site)
+  fetch('/api/health?sonda=1', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (h) {
+    if (!h || !h.version || compararVersao(h.version, VERSAO_APP) <= 0 || ESTADO.versaoNova) return;
+    ESTADO.versaoNova = h.version;
+    var div = document.createElement('div');
+    div.className = 'aviso-versao';
+    div.setAttribute('role', 'status');
+    div.innerHTML = '<span>Saiu uma versão nova do LicitaFácil (' + esc(h.version) + ').</span>' +
+      '<button type="button" class="btn btn-primary btn-sm" data-acao="atualizar-versao">Atualizar agora</button>';
+    document.body.appendChild(div);
+  }).catch(function () { /* sem rede: tenta depois */ });
+}
+
 function iniciar() {
   ligarEventos();
   marcarPreferencias();
@@ -2233,6 +2434,8 @@ function iniciar() {
     ESTADO.usuario = u;
     renderUsuario();
     rotear();
+    setInterval(verificarVersaoNova, 10 * 60 * 1000);
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') verificarVersaoNova(); });
   });
 }
 

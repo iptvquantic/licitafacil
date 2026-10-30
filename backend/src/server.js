@@ -12,7 +12,7 @@ const { query } = require('./utils/db');
 const { migrar } = require('./utils/migrar');
 const indexacao = require('./services/indexacao.service');
 
-const VERSAO = '3.3.0';
+const VERSAO = '3.4.0';
 process.env.APP_VERSION = VERSAO;
 
 const app = express();
@@ -58,7 +58,8 @@ function configuracao() {
     banco: !!process.env.DATABASE_URL,
     jwt: !!process.env.JWT_SECRET,
     admin: !!process.env.ADMIN_EMAILS,
-    ia: !!process.env.OPENROUTER_API_KEY
+    ia: !!process.env.OPENROUTER_API_KEY || !!process.env.GEMINI_API_KEY,
+    gemini: !!process.env.GEMINI_API_KEY
   };
 }
 

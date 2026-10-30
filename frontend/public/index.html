@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="css/app.css?v=3.3.0">
-  <script src="js/utils.js?v=3.3.0"></script>
+  <link rel="stylesheet" href="css/app.css?v=3.4.0">
+  <script src="js/utils.js?v=3.4.0"></script>
 </head>
 <body>
 <a href="#conteudo" class="skip-link">Pular para o conteúdo</a>
@@ -103,21 +103,6 @@
       <section id="secao-busca" class="secao hidden" aria-labelledby="topbar-title">
         <div id="onboarding"></div>
 
-        <div class="stats-row">
-          <div class="stat-box">
-            <div class="stat-ico azul" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1"/></svg></div>
-            <div><div class="stat-num" id="st-fornecedores">—</div><div class="stat-lbl">Fornecedores</div></div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-ico verde" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></div>
-            <div><div class="stat-num" id="st-produtos">—</div><div class="stat-lbl">Produtos organizados</div></div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-ico roxo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h5"/></svg></div>
-            <div><div class="stat-num" id="st-catalogos">—</div><div class="stat-lbl">Catálogos lidos</div></div>
-          </div>
-        </div>
-
         <form class="busca-wrap" id="form-busca" role="search" autocomplete="off">
           <label for="campo-busca" class="sr-only">O que você procura?</label>
           <div class="busca-row">
@@ -143,6 +128,21 @@
             <button type="button" class="chip-btn" data-acao="exemplo">cimento CP-III</button>
           </div>
         </form>
+
+        <div class="stats-row">
+          <div class="stat-box">
+            <div class="stat-ico azul" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1"/></svg></div>
+            <div><div class="stat-num" id="st-fornecedores">—</div><div class="stat-lbl">Fornecedores</div></div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-ico verde" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></div>
+            <div><div class="stat-num" id="st-produtos">—</div><div class="stat-lbl">Produtos<span class="so-desktop"> organizados</span></div></div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-ico roxo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h5"/></svg></div>
+            <div><div class="stat-num" id="st-catalogos">—</div><div class="stat-lbl">Catálogos<span class="so-desktop"> lidos</span></div></div>
+          </div>
+        </div>
 
         <div id="ia-area" aria-live="polite"></div>
         <div id="resultados" aria-live="polite"></div>
@@ -239,6 +239,10 @@
                 </div>
                 <div class="flex items-center gap-2" style="flex-wrap:wrap">
                   <span class="text-sm text-muted" id="contagem-produtos" aria-live="polite"></span>
+                  <button type="button" class="btn btn-primary btn-sm" data-acao="novo-produto">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    Adicionar produto
+                  </button>
                   <button type="button" class="btn btn-secondary btn-sm" data-acao="exportar-produtos">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12"/><path d="m6 10 6 6 6-6"/><path d="M4 20h16"/></svg>
                     Baixar planilha
@@ -259,7 +263,7 @@
                         <th scope="col">Material</th>
                         <th scope="col">Norma</th>
                         <th scope="col" class="num">Preço</th>
-                        <th scope="col"><span class="sr-only">Detalhes</span></th>
+                        <th scope="col"><span class="sr-only">Ações</span></th>
                       </tr>
                     </thead>
                     <tbody id="tbody-produtos"></tbody>
@@ -515,6 +519,113 @@
   </form>
 </div>
 
+<!-- ══ MODAL: PRODUTO (cadastro à mão e correção) ═══════════ -->
+<div class="modal-overlay" id="modal-produto" aria-hidden="true">
+  <form class="modal modal-largo" id="form-produto" role="dialog" aria-modal="true" aria-labelledby="modal-produto-titulo" novalidate>
+    <div class="modal-header">
+      <h2 class="modal-title" id="modal-produto-titulo">Novo produto</h2>
+      <button type="button" class="btn btn-ghost btn-icon" data-acao="fechar-modal" data-modal="modal-produto" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="prod-id">
+      <p class="text-sm text-muted mb-3" id="prod-fornecedor"></p>
+      <div class="form-group">
+        <label class="form-label" for="prod-nome">Nome do produto *</label>
+        <input class="input" id="prod-nome" maxlength="300" required placeholder="Ex.: Cabo Flexível 750V 2,5 mm²" data-foco-inicial>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="prod-codigo">Código / referência</label>
+          <input class="input" id="prod-codigo" maxlength="300" placeholder="Ex.: CF-25">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="prod-bitola">Medida / bitola / tamanho</label>
+          <input class="input" id="prod-bitola" maxlength="300" placeholder="Ex.: 2,5 mm² · 3x2,5 mm² · 20 A">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="prod-tensao">Tensão</label>
+          <input class="input" id="prod-tensao" maxlength="300" placeholder="Ex.: 450/750 V">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="prod-marca">Marca</label>
+          <input class="input" id="prod-marca" maxlength="300" placeholder="Ex.: Energy">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="prod-preco">Preço</label>
+          <input class="input" id="prod-preco" maxlength="300" placeholder="Ex.: R$ 2,90">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="prod-unidade">Unidade de venda</label>
+          <input class="input" id="prod-unidade" maxlength="300" placeholder="Ex.: metro · rolo 100 m · peça">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="prod-categoria">Categoria</label>
+          <input class="input" id="prod-categoria" maxlength="300" placeholder="Ex.: Cabos flexíveis">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="prod-norma">Norma</label>
+          <input class="input" id="prod-norma" maxlength="300" placeholder="Ex.: ABNT NBR NM 247-3">
+        </div>
+      </div>
+      <details class="mais-dados" id="prod-mais">
+        <summary>Mais dados técnicos (opcional)</summary>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="prod-material">Material</label>
+            <input class="input" id="prod-material" maxlength="300" placeholder="Ex.: cobre eletrolítico">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="prod-isolamento">Isolação</label>
+            <input class="input" id="prod-isolamento" maxlength="300" placeholder="Ex.: PVC 70 °C">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="prod-cobertura">Cobertura</label>
+            <input class="input" id="prod-cobertura" maxlength="300" placeholder="Ex.: PVC preto">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="prod-temperatura">Temperatura máxima</label>
+            <input class="input" id="prod-temperatura" maxlength="300" placeholder="Ex.: 70 °C">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="prod-aplicacao">Aplicação</label>
+            <input class="input" id="prod-aplicacao" maxlength="1500" placeholder="Ex.: instalações residenciais">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="prod-certificacoes">Certificações</label>
+            <input class="input" id="prod-certificacoes" maxlength="300" placeholder="Ex.: INMETRO">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="prod-descricao">Descrição técnica</label>
+          <textarea class="textarea" id="prod-descricao" maxlength="1500" rows="2" placeholder="1 ou 2 linhas com o que importa na cotação"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="prod-atributos">Outras informações (uma por linha)</label>
+          <textarea class="textarea" id="prod-atributos" rows="3" placeholder="Diâmetro externo (mm): 3,4&#10;Peso (kg/km): 31&#10;Cores: preto, azul, verde"></textarea>
+        </div>
+      </details>
+      <div class="form-error hidden" id="prod-erro" role="alert"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" data-acao="fechar-modal" data-modal="modal-produto">Cancelar</button>
+      <button type="button" class="btn btn-secondary" id="btn-produto-outro" data-acao="salvar-produto-outro">Salvar e adicionar outro</button>
+      <button type="submit" class="btn btn-primary" id="btn-salvar-produto">Salvar produto</button>
+    </div>
+  </form>
+</div>
+
 <!-- ══ MODAL: CONFIRMAÇÃO ════════════════════════════════════ -->
 <div class="modal-overlay" id="modal-confirmar" aria-hidden="true">
   <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="confirmar-titulo" aria-describedby="confirmar-texto" style="max-width:440px">
@@ -532,8 +643,8 @@
   </div>
 </div>
 
-<script src="js/leitor.js?v=3.3.0"></script>
-<script src="js/importador.js?v=3.3.0"></script>
-<script src="js/app.js?v=3.3.0"></script>
+<script src="js/leitor.js?v=3.4.0"></script>
+<script src="js/importador.js?v=3.4.0"></script>
+<script src="js/app.js?v=3.4.0"></script>
 </body>
 </html>

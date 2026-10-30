@@ -38,8 +38,8 @@ jobs:
       - name: Auditoria de segurança das dependências
         working-directory: backend
         run: npm audit --omit=dev --audit-level=high
-      - name: Testar o leitor de catálogos
-        run: node testes/leitor.test.js
+      - name: Testar o leitor de catálogos e a versão
+        run: node testes/leitor.test.js && node testes/versao.test.js
       - name: Subir a API e testar
         run: |
           node backend/src/server.js > api.log 2>&1 &
@@ -51,3 +51,7 @@ jobs:
           OPENROUTER_API_KEY=chave-teste OPENROUTER_BASE_URL=http://localhost:4010 IA_PARADO_MS=3000 IA_PRAZO_EXTRACAO_MS=30000 PORT=3001 node backend/src/server.js > api-ia.log 2>&1 &
           for i in $(seq 1 30); do curl -sf localhost:3001/api/health > /dev/null && break; sleep 1; done
           BASE=http://localhost:3001 node testes/ia.test.js || (echo '--- log da API ---'; cat api-ia.log; echo '--- log do mock ---'; cat mock.log; exit 1)
+      - name: Testar a leitura com o Google Gemini (simulado) e a reserva do OpenRouter
+        run: |
+          curl -sf -X POST localhost:4010/__reiniciar > /dev/null || (node testes/mock-openrouter.js > mock2.log 2>&1 & sleep 2)
+          node testes/gemini.test.js

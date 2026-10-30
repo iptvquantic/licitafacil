@@ -18,7 +18,7 @@ var Importador = (function () {
   // A API responde { ok:false, code } quando a IA gratuita falha (cota, modelo ocupado): vira erro aqui
   function respostaIA(r) {
     if (r && r.ok === false) {
-      throw { error: r.error, code: r.code, tentados: r.tentados || [], status: r.code === 'COTA' ? 429 : (r.code === 'SEM_CHAVE' ? 503 : 502) };
+      throw { error: r.error, code: r.code, tentados: r.tentados || [], motivos: r.motivos || [], status: r.code === 'COTA' ? 429 : (r.code === 'SEM_CHAVE' ? 503 : 502) };
     }
     return r;
   }
@@ -184,7 +184,8 @@ var Importador = (function () {
       return obter.then(function (t) {
         registrar(k, {
           estado: 'sem_ia', metodo: temTexto ? 'pdf_texto' : 'ocr', texto: String(t || ''),
-          erroIA: erroVisao ? (erroVisao.error || 'A IA não respondeu nesta página.') : ''
+          erroIA: erroVisao ? (erroVisao.error || 'A IA não respondeu nesta página.') : '',
+          motivosIA: erroVisao && Array.isArray(erroVisao.motivos) ? erroVisao.motivos.slice(0, 8) : []
         });
       });
     }
