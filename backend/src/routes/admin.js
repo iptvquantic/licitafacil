@@ -146,6 +146,11 @@ router.get('/diagnostico', async (req, res) => {
   } catch (err) { out.ia.erro_capacidades = err.message; }
   if (req.query.testar_ia === '1') {
     try { out.ia.teste = await ia.testarIA(); } catch (err) { out.ia.teste = { ok: false, erro: err.message }; }
+    // o teste muda o estado (Gemini funcionando, motivos da falha): mostra o estado de depois do teste
+    const depois = ia.estadoIA();
+    out.ia.gemini = depois.gemini;
+    out.ia.ultimos_motivos = depois.ultimos_motivos;
+    out.ia.ultimo_erro = depois.ultimo_erro;
   }
   out.email = { configurado: email.configurado() };
   out.admin_emails = String(process.env.ADMIN_EMAILS || '').split(',').filter(Boolean).length;

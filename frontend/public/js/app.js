@@ -2141,6 +2141,11 @@ function renderAdminUsuarios(r) {
         '</div></td></tr>';
     }).join('') + '</tbody></table></div>');
 }
+// "gemini:gemini-flash-lite-latest" → "Gemini gemini-flash-lite-latest"; "google/gemma-4-31b-it:free" → "gemma-4-31b-it"
+function nomeModeloIA(m) {
+  m = String(m || '');
+  return m.indexOf('gemini:') === 0 ? 'Gemini ' + m.slice(7) : m.replace(/^[^/]+\//, '').replace(/:free$/, '');
+}
 function renderAdminDiagnostico(d) {
   if (d._erro) { html('adm-diagnostico', caixaErro(msgErro(d._erro), 'admin-atualizar')); return; }
   function linha(rotulo, valorHtml) { return '<div><span>' + esc(rotulo) + '</span><strong>' + valorHtml + '</strong></div>'; }
@@ -2148,18 +2153,25 @@ function renderAdminDiagnostico(d) {
   var rls = (d.banco && d.banco.rls) || [];
   var semRls = rls.filter(function (t) { return !t.relrowsecurity; }).map(function (t) { return t.relname; });
   var ia = d.ia || {};
+  var geminiAtivo = !!(ia.gemini && ia.gemini.ativo);
+  // OpenRouter: com o Gemini ligado ele é a reserva; o resultado do botão "Testar a IA" fica na linha própria
   var iaTxt = !(ia.openrouter ? ia.openrouter.configurado : ia.configurada) ? '<span style="color:var(--warning)">sem chave do OpenRouter</span>'
-    : ia.teste ? (ia.teste.ok ? '<span class="text-ok">respondeu (' + esc(ia.teste.modelo) + ')</span>' : '<span style="color:var(--danger)">' + esc(ia.teste.erro) + '</span>')
-      : (ia.ultimo_sucesso ? '<span class="text-ok">funcionando</span>' + (ia.modelo_atual ? ' · ' + esc(ia.modelo_atual) : '') : 'configurada (clique em Testar a IA)');
+    : geminiAtivo ? '<span class="text-ok">configurado</span> · reserva (entra se o Gemini falhar)'
+      : (ia.ultimo_sucesso ? '<span class="text-ok">funcionando</span>' + (ia.modelo_atual ? ' · ' + esc(nomeModeloIA(ia.modelo_atual)) : '') : 'configurado (clique em Testar a IA)');
+  var testeTxt = !ia.teste ? '' : ia.teste.ok
+    ? '<span class="text-ok">respondeu</span> · ' + esc(nomeModeloIA(ia.teste.modelo)) + (ia.teste.ms ? ' · ' + esc((ia.teste.ms / 1000).toFixed(1).replace('.', ',')) + ' s' : '')
+    : '<span style="color:var(--danger)">' + esc(ia.teste.erro) + '</span>';
   html('adm-diagnostico', '<div class="diag-lista">' +
     linha('API', ok + ' · versão ' + esc(d.versao) + ' · Node ' + esc(d.node)) +
     linha('Banco de dados', d.banco && d.banco.ok ? ok + ' · ' + esc(d.banco.ms) + ' ms' : '<span style="color:var(--danger)">fora do ar</span>') +
     linha('Proteção das tabelas (RLS)', !rls.length ? '—' : (semRls.length ? '<span style="color:var(--warning)">desligada em ' + esc(semRls.join(', ')) + '</span>' : '<span class="text-ok">ligada em ' + rls.length + ' tabelas</span>')) +
     linha('Google Gemini (leitura principal)', ia.gemini && ia.gemini.configurado
-      ? (ia.gemini.ativo ? '<span class="text-ok">ligado</span>' + (ia.gemini.ultimo_sucesso ? ' · funcionando' : '') + ' · ' + esc((ia.gemini.modelos || []).join(', '))
+      ? (ia.gemini.ativo ? '<span class="text-ok">ligado</span>' + (ia.gemini.ultimo_sucesso ? ' · <span class="text-ok">funcionando</span>' : '') + ' · ' +
+          esc((ia.gemini.modelos || []).map(function (m) { return m.replace(/^Gemini /, ''); }).join(', '))
         : '<span style="color:var(--warning)">' + esc(ia.gemini.ultimo_erro || 'chave recusada') + '</span>')
       : '<span style="color:var(--warning)">sem chave</span> <span class="text-sm text-muted">(chave grátis em aistudio.google.com → Get API key; ' +
         'na Vercel: Settings → Environment Variables → GEMINI_API_KEY)</span>') +
+    (testeTxt ? linha('Teste da IA agora', testeTxt) : '') +
     linha('IA (OpenRouter)', iaTxt) +
     (ia.configurada ? linha('Leitura de páginas pela IA', ia.visao ? ok + ' · ' + esc(ia.modelos_visao) + ' modelos gratuitos de imagem' + (ia.modelo_visao ? ' · ' + esc(ia.modelo_visao) : '')
       : '<span style="color:var(--warning)">nenhum modelo gratuito de imagem disponível agora</span>') : '') +
@@ -2398,7 +2410,7 @@ window.addEventListener('error', function (ev) {
 });
 
 // ─── Versão nova publicada: avisa para atualizar (a tela aberta há horas continua com o código antigo) ───
-var VERSAO_APP = '3.4.1'; // igual ao ?v= dos arquivos e à versão da API (conferido pelo teste testes/versao.test.js)
+var VERSAO_APP = '3.4.2'; // igual ao ?v= dos arquivos e à versão da API (conferido pelo teste testes/versao.test.js)
 function compararVersao(a, b) {
   var x = String(a || '0').split('.'), y = String(b || '0').split('.');
   for (var i = 0; i < 3; i++) {
