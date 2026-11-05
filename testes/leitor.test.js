@@ -96,6 +96,11 @@ const inteiro = JSON.stringify({ fornecedor: { nome: 'Energy' }, tabelas: [tab] 
 const cortado = E.normalizarResultadoIA(inteiro.slice(0, inteiro.indexOf('["2,5"') + 9));
 check(cortado && cortado.produtos.length === 1 && cortado.produtos[0].bitola === '1,5 mm²' && cortado.fornecedor.nome === 'Energy', 'JSON cortado no meio de uma linha: fica a linha completa', cortado);
 check(E.normalizarSite('wwww.energycondutores.com.br') === 'https://www.energycondutores.com.br', 'site com "wwww" lido errado é corrigido');
+// colunas de medida (Ø do condutor, espessura) não viram material/isolação (erro visto num catálogo real em 05/11)
+const med = E.expandirTabela({ produto: 'Cabo Flexível 750V', colunas: ['Seção nominal (mm²)', 'Ø condutor (mm)', 'Espessura isolação (mm)', 'Material', 'Isolação'],
+  linhas: [['1,5', '1,5', '0,7', 'cobre', 'PVC 70 °C']] })[0];
+check(med && !/^1,5/.test(med.material || '') && med.material === 'cobre' && med.isolamento === 'PVC 70 °C' &&
+  med.atributos['Ø condutor (mm)'] === '1,5' && med.atributos['Espessura isolação (mm)'] === '0,7', 'Ø do condutor e espessura vão para atributos', med);
 
 console.log('\nRESULTADO LEITOR: ' + ok + ' ok, ' + falhas + ' falha(s)');
 process.exit(falhas ? 1 : 0);

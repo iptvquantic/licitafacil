@@ -395,18 +395,26 @@ function parseJSONTolerante(texto) {
 }
 
 // ─── Tabelas (formato compacto da IA): cada linha vira um produto ─────────────
+// Coluna de medida numérica (Ø do condutor, espessura, peso, resistência…): vai para "atributos", nunca para material/isolação/cobertura
+function colunaDeMedida(cab) {
+  var s = String(cab || '');
+  return /[øØ⌀]|di[aâ]m|espessura|peso|resist|corrente|capacidade|comprimento|raio|massa/i.test(s) ||
+    /\(\s*(mm²?|mm2|cm|m|kg\/km|kg\/100 ?m|kg|g|Ω\/km|ohm\/km|a|w)\s*\)/i.test(s);
+}
+
 // Cabeçalho da coluna → campo do produto (o resto vira atributo com o nome da coluna)
 function campoDaColuna(cab) {
   var k = chave(cab).replace(/\b(mm2|mm|kv|v|a|kg|km|m|r|un|und|pc|pcs)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  var medida = colunaDeMedida(cab);
   if (/^(cod|codigo|code|ref|referencia|reference|sku|part number|item|modelo|model|cat|catalogo)( .*)?$/.test(k)) return 'codigo';
   if (/^(secao|secao nominal|bitola|formacao|dimensao|dimensoes|medida|medidas|tamanho|size|calibre|awg|condutores x secao|n x secao|no de condutores x secao)( .*)?$/.test(k)) return 'bitola';
   if (/^(tensao|tensao nominal|voltagem|voltage|tensao de isolamento)( .*)?$/.test(k)) return 'tensao';
   if (/^(preco|valor|price|preco unitario|preco unit)( .*)?$/.test(k)) return 'preco';
   if (/^(norma|normas|standard)( .*)?$/.test(k)) return 'norma';
   if (/^(descricao|description|produto|nome|especificacao)( .*)?$/.test(k)) return 'descricao';
-  if (/^(material|material condutor|condutor)$/.test(k)) return 'material';
-  if (/^(isolacao|isolamento|insulation)( .*)?$/.test(k)) return 'isolamento';
-  if (/^(cobertura|capa)( .*)?$/.test(k)) return 'cobertura';
+  if (!medida && /^(material|material condutor|condutor)$/.test(k)) return 'material';
+  if (!medida && /^(isolacao|isolamento|insulation)( .*)?$/.test(k)) return 'isolamento';
+  if (!medida && /^(cobertura|capa)( .*)?$/.test(k)) return 'cobertura';
   if (/^(temperatura|temp)( .*)?$/.test(k)) return 'temperatura';
   if (/^(marca|fabricante|brand)$/.test(k)) return 'marca';
   if (/^(unidade|unid|un de venda|unidade de venda)$/.test(k)) return 'unidade';
