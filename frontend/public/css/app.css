@@ -717,6 +717,7 @@ code, .mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
 
 
 /* ─── Busca: uma linha por fornecedor (quem tem, o que tem e o contato) ─── */
+.cotacao-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 12px; }
 .res-forn { list-style: none; margin: 0 0 22px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .res-forn-item { background: var(--surface); border: 1px solid var(--border2); border-radius: var(--r-lg); padding: 14px 18px;
   display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 22px; align-items: center; }

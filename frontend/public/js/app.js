@@ -65,6 +65,7 @@ var ICONES = {
   fone: svg('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
   whats: svg('<path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"/>'),
   email: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'),
+  copiar: svg('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>'),
   olho: svg('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>'),
   ok: svg('<path d="M20 6 9 17l-5-5"/>'),
   alerta: svg('<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>'),
@@ -521,6 +522,53 @@ function cardResultadoProduto(p, re) {
       htmlContatos(p.fornecedor, { produto: p.nome + (p.codigo ? ' (cód. ' + p.codigo + ')' : '') }) + '</div>' +
     '</div>';
 }
+// ─── Pedir cotação a todos os fornecedores que têm o produto (e-mail único em cópia oculta, mensagem e contatos) ───
+function textoPedidoCotacao(q) {
+  var nome = ESTADO.usuario && ESTADO.usuario.nome ? String(ESTADO.usuario.nome) : '';
+  return 'Olá! Gostaria de uma cotação de:\n\n' + q + '\n\nQuantidade: \nPrazo de entrega: \nCondição de pagamento: \nFrete: \n\nObrigado' + (nome ? ',\n' + nome : '!');
+}
+function emailsDaCotacao(lista) {
+  var vistos = {};
+  return lista.map(function (f) { return String(f.email || '').trim(); }).filter(function (e) {
+    var k = e.toLowerCase();
+    if (!e || vistos[k]) return false;
+    vistos[k] = 1;
+    return true;
+  });
+}
+function htmlAcoesCotacao(lista, q) {
+  var emails = emailsDaCotacao(lista);
+  var mailto = 'mailto:?bcc=' + encodeURIComponent(emails.join(',')) + '&subject=' + encodeURIComponent('Cotação — ' + q) +
+    '&body=' + encodeURIComponent(textoPedidoCotacao(q));
+  return '<div class="cotacao-acoes" role="group" aria-label="Pedir cotação a todos">' +
+    (emails.length ? '<a class="btn btn-primary btn-sm" data-cotacao="email" href="' + esc(mailto) + '">' + ICONES.email + 'E-mail para todos (' + numero(emails.length) + ')</a>' : '') +
+    '<button type="button" class="btn btn-secondary btn-sm" data-acao="cotacao-mensagem">' + ICONES.copiar + 'Copiar mensagem de cotação</button>' +
+    '<button type="button" class="btn btn-secondary btn-sm" data-acao="cotacao-contatos">' + ICONES.copiar + 'Copiar contatos (' + numero(lista.length) + ')</button>' +
+    '</div>';
+}
+function textoContatosCotacao(c) {
+  var linhas = ['Cotação — ' + c.q + ' (' + c.fornecedores.length + ' ' + plural(c.fornecedores.length, 'fornecedor', 'fornecedores') + ')', ''];
+  c.fornecedores.forEach(function (f, i) {
+    var prods = c.porForn[f.fornecedor_id] || [];
+    var partes = [(i + 1) + '. ' + f.nome];
+    if (f.telefone) partes.push('tel. ' + formatPhone(f.telefone));
+    if (f.whatsapp && f.whatsapp !== f.telefone) partes.push('WhatsApp ' + formatPhone(f.whatsapp));
+    if (f.email) partes.push(f.email);
+    if (prods[0]) partes.push(prods[0].nome + (prods[0].codigo ? ' (cód. ' + prods[0].codigo + ')' : '') + (prods[0].preco ? ' — ' + prods[0].preco : ''));
+    linhas.push(partes.join(' — '));
+  });
+  return linhas.join('\n');
+}
+function copiarCotacao(tipo, botao) {
+  var c = ESTADO.cotacao;
+  if (!c) return;
+  var texto = tipo === 'contatos' ? textoContatosCotacao(c) : textoPedidoCotacao(c.q);
+  copiarTexto(texto).then(function () {
+    showToast(tipo === 'contatos' ? 'Contatos copiados. Cole na planilha, no e-mail ou no WhatsApp.' : 'Mensagem copiada. Cole no WhatsApp de cada fornecedor.', 'success');
+    if (botao) botao.focus();
+  }).catch(function () { showToast('Não foi possível copiar. Selecione e copie à mão.', 'error'); });
+}
+
 // ─── Resultado da busca: primeiro QUEM TEM (por fornecedor, com contato), depois a comparação dos produtos ───
 // Medida, tensão e norma que ainda não aparecem no nome (sem repetir o que já está escrito)
 function resumoProdutoBusca(p) {
@@ -607,10 +655,12 @@ function renderResultados(r, q) {
     return;
   }
   var partes = [];
+  ESTADO.cotacao = comProduto.length ? { q: q, fornecedores: comProduto, porForn: porForn } : null;
   if (comProduto.length) {
     partes.push('<div class="quem-tem mb-4"><div class="secao-titulo"><h3>' + numero(comProduto.length) + ' ' +
       plural(comProduto.length, 'fornecedor tem', 'fornecedores têm') + ' “' + esc(q) + '”</h3>' +
-      '<span class="contagem">contato direto para a cotação</span></div>' + htmlListaFornecedores(comProduto, q, porForn, re) + '</div>');
+      '<span class="contagem">contato direto para a cotação</span></div>' + htmlAcoesCotacao(comProduto, q) +
+      htmlListaFornecedores(comProduto, q, porForn, re) + '</div>');
   }
   if (citados.length) {
     partes.push('<div class="mb-4"><div class="secao-titulo"><h3>' + (comProduto.length ? 'Também citam “' + esc(q) + '” no catálogo' : 'Citado nos catálogos de') +
@@ -929,7 +979,7 @@ function renderProdutos() {
     var comTexto = cats.filter(function (c) { return c.status === 'processado'; }).length;
     var texto = processando ? 'A IA está organizando os produtos do catálogo. A tabela aparece aqui sozinha quando terminar.'
       : comTexto ? 'O catálogo foi lido e já aparece na busca, mas não estava no formato do Prompt Mestre. Para ter a tabela de produtos, use “Colar a resposta da IA” ou “Organizar com IA” na aba Catálogos.'
-        : 'Envie o catálogo deste fornecedor (PDF, escaneado ou foto) ou cole a resposta do Prompt Mestre.';
+        : 'Envie o catálogo deste fornecedor (PDF, escaneado ou foto) ou cadastre os produtos à mão.';
     html('produtos-vazio', caixaVazia(processando ? '<span class="spinner spinner-lg"></span>' : ICONES.caixa,
       processando ? 'Organizando os produtos…' : 'Nenhum produto organizado ainda', texto,
       '<button type="button" class="btn btn-primary" data-acao="aba" data-aba="adicionar">' + ICONES.enviar + 'Adicionar catálogo</button>' +
@@ -2295,6 +2345,8 @@ function aoClicar(e) {
     case 'aba': mudarAba(el.getAttribute('data-aba')); break;
     case 'modo-entrada': mudarModoEntrada(el.getAttribute('data-modo')); break;
     case 'copiar-prompt': copiarPromptMestre(el); break;
+    case 'cotacao-mensagem': copiarCotacao('mensagem', el); break;
+    case 'cotacao-contatos': copiarCotacao('contatos', el); break;
     case 'indexar-colado': indexarColado(); break;
     case 'imp-comecar': comecarLeitura(); break;
     case 'imp-cancelar': cancelarImportacao(); el.disabled = true; el.textContent = 'Cancelando…'; break;
@@ -2410,7 +2462,7 @@ window.addEventListener('error', function (ev) {
 });
 
 // ─── Versão nova publicada: avisa para atualizar (a tela aberta há horas continua com o código antigo) ───
-var VERSAO_APP = '3.4.2'; // igual ao ?v= dos arquivos e à versão da API (conferido pelo teste testes/versao.test.js)
+var VERSAO_APP = '3.5.0'; // igual ao ?v= dos arquivos e à versão da API (conferido pelo teste testes/versao.test.js)
 function compararVersao(a, b) {
   var x = String(a || '0').split('.'), y = String(b || '0').split('.');
   for (var i = 0; i < 3; i++) {

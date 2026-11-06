@@ -365,6 +365,16 @@ async function salvarCatalogo(page, area) {
     const waQuem = decodeURIComponent(await itemFlex.locator('a.btn-whats').first().getAttribute('href'));
     esperar(/^https:\/\/wa\.me\/5511957808642\?text=.*PP-325/.test(waQuem), 'WhatsApp do resumo sem o produto: ' + waQuem);
     esperar(/PP-325/.test(await itemFlex.innerText()), 'linha do fornecedor sem o produto encontrado');
+    // pedir cotação a todos: e-mail único em cópia oculta, mensagem e lista de contatos
+    const mail = await page.locator('#resultados .cotacao-acoes a[data-cotacao="email"]').getAttribute('href');
+    esperar(/^mailto:\?bcc=/.test(mail) && /subject=Cota%C3%A7%C3%A3o/.test(mail) && /Quantidade/.test(decodeURIComponent(mail)), 'e-mail para todos: ' + mail);
+    await page.click('#resultados [data-acao="cotacao-contatos"]');
+    await page.waitForFunction(() => /Contatos copiados/.test(document.getElementById('toast-container').textContent));
+    const lista = await page.evaluate(() => navigator.clipboard.readText());
+    esperar(/^Cotação — cabo pp/.test(lista) && /Flex Fast/.test(lista) && /Energy/.test(lista) && /PP-325/.test(lista), 'contatos copiados: ' + lista.slice(0, 300));
+    await page.click('#resultados [data-acao="cotacao-mensagem"]');
+    await page.waitForFunction(() => /Mensagem copiada/.test(document.getElementById('toast-container').textContent));
+    esperar(/Gostaria de uma cotação de:\s+cabo pp/.test(await page.evaluate(() => navigator.clipboard.readText())), 'mensagem de cotação copiada');
     const linhaFlex = page.locator('#resultados .tabela tbody tr', { hasText: 'Flex Fast' }).first();
     const wa = await linhaFlex.locator('a.btn-whats').first().getAttribute('href');
     esperar(/^https:\/\/wa\.me\/5511957808642\?text=/.test(wa), 'link do WhatsApp: ' + wa);
