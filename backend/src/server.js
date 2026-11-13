@@ -12,7 +12,7 @@ const { query } = require('./utils/db');
 const { migrar } = require('./utils/migrar');
 const indexacao = require('./services/indexacao.service');
 
-const VERSAO = '3.6.0';
+const VERSAO = '3.6.1';
 process.env.APP_VERSION = VERSAO;
 
 const app = express();
@@ -66,11 +66,19 @@ function configuracao() {
 let saude = { em: 0, db: null, ms: null };
 app.get('/api/health', async function (req, res) {
   const cfg = configuracao();
-  if (Date.now() - saude.em > 30000) {
+  // ?manter=1 (Action "Manter banco ativo", várias vezes por dia): lê as tabelas de verdade — o Supabase grátis pausa
+  // o projeto quando não vê "atividade de usuário" no banco durante 7 dias, e um SELECT 1 por dia não bastou (pausou em 12/11/2026)
+  const manter = req.query.manter === '1';
+  if (manter || Date.now() - saude.em > 30000) {
     const t = Date.now();
     try {
       if (!cfg.banco) throw new Error('DATABASE_URL ausente');
-      await query('SELECT 1');
+      if (manter) {
+        await query('SELECT (SELECT count(*) FROM usuarios)::int AS usuarios, (SELECT count(*) FROM fornecedores)::int AS fornecedores,' +
+          ' (SELECT count(*) FROM produtos)::int AS produtos').catch(function () { return query('SELECT 1'); });
+      } else {
+        await query('SELECT 1');
+      }
       saude = { em: Date.now(), db: 'ok', ms: Date.now() - t };
     } catch (err) {
       saude = { em: Date.now(), db: 'erro', ms: null };

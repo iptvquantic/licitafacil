@@ -2524,7 +2524,7 @@ window.addEventListener('error', function (ev) {
 });
 
 // ─── Versão nova publicada: avisa para atualizar (a tela aberta há horas continua com o código antigo) ───
-var VERSAO_APP = '3.6.0'; // igual ao ?v= dos arquivos e à versão da API (conferido pelo teste testes/versao.test.js)
+var VERSAO_APP = '3.6.1'; // igual ao ?v= dos arquivos e à versão da API (conferido pelo teste testes/versao.test.js)
 function compararVersao(a, b) {
   var x = String(a || '0').split('.'), y = String(b || '0').split('.');
   for (var i = 0; i < 3; i++) {

@@ -13,6 +13,10 @@ async function api(method, path, body, token) {
 }
 (async () => {
   const sufixo = Date.now();
+  console.log('0) saúde');
+  let h = await fetch(BASE + '/api/health?manter=1');
+  let hj = await h.json();
+  check(h.status === 200 && hj.db === 'ok' && hj.status === 'ok', 'health ?manter=1 lê as tabelas e responde ok', hj);
   console.log('1) cadastro e sessão');
   let r = await api('POST', '/api/auth/cadastro', { nome: 'Usuária A', email: 'a' + sufixo + '@teste.com', senha: 'segredo1' });
   check(r.s === 201 && r.j.token, 'cadastro A', r);
