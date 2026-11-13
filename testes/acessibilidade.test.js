@@ -32,6 +32,12 @@ function esperarAnimacoes(pg) {
   });
   const telas = [
     ['busca', SITE + '/#busca', async () => { await p.fill('#campo-busca', 'cabo PP 3x2,5mm'); await p.click('#btn-buscar'); await p.waitForSelector('#resultados .tabela'); }],
+    ['busca (só parecido)', SITE + '/#busca', async () => { await p.fill('#campo-busca', 'cabo flexível 4mm 750V'); await p.click('#btn-buscar'); await p.waitForSelector('#resultados .res-forn-item.parecido'); }],
+    ['cotação em lista', SITE + '/#cotacao', async () => {
+      await p.fill('#cot-itens', 'cabo PP 3x2,5mm - 300 m\ncabo flexível 4mm 750V - 20 m\ncimento CP-III - 40 sacos');
+      await p.click('#btn-cotacao');
+      await p.waitForSelector('#cot-resultado .cot-lista');
+    }],
     ['fornecedores', SITE + '/#fornecedores', async () => { await p.waitForSelector('#lista-fornecedores .tabela'); }],
     ['produtos', SITE + '/#fornecedor/' + fid, async () => { await p.waitForSelector('#tbody-produtos tr'); }],
     ['produto à mão (formulário)', SITE + '/#fornecedor/' + fid, async () => {

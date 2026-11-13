@@ -3,14 +3,15 @@
 | Teste | Comando | Precisa de |
 |---|---|---|
 | Leitor de catálogos (parser) | `node testes/leitor.test.js` | nada |
-| API completa (51 verificações: cadastro, leitor, busca, segurança, planos, painel) | `node testes/api.test.js` | API rodando em `BASE` (padrão `http://localhost:3000`) com `ADMIN_EMAILS=admin@teste.com` e `DATABASE_URL` de um Postgres de teste |
+| Lista da cotação (30 verificações: linha de edital, colunas coladas do Excel, quantidade no começo ou no fim, cabeçalho ignorado, itens repetidos, pedido por fornecedor) | `node testes/cotacao.test.js` | nada |
+| API completa (82 verificações: cadastro, leitor, busca, "tem" × "parecido" pela medida, cotação em lista, segurança, planos, painel) | `node testes/api.test.js` | API rodando em `BASE` (padrão `http://localhost:3000`) com `ADMIN_EMAILS=admin@teste.com` e `DATABASE_URL` de um Postgres de teste |
 | Leitura com IA (54 verificações: página por imagem em streaming, tabela compacta, resposta cortada ou IA travada + continuação, falha da IA = `ok:false`, PDF já organizado sem gastar cota, fornecedor achado no catálogo, importação, busca no plural) | `node testes/ia.test.js` | API com a IA simulada: `node testes/mock-openrouter.js` (porta 4010) e a API com `OPENROUTER_BASE_URL=http://localhost:4010 OPENROUTER_API_KEY=chave-teste IA_PARADO_MS=3000 IA_PRAZO_EXTRACAO_MS=30000` |
 | Google Gemini simulado (13 verificações: Gemini primeiro, chave errada cai para o OpenRouter, limite diário passa para o próximo modelo, motivos de cada falha) | `node testes/gemini.test.js` | o mock (porta 4010) e as variáveis do banco (`DATABASE_URL`, `JWT_SECRET`): o teste sobe a própria API nas portas 3011–3014 |
-| Navegador ponta a ponta (37 passos: produto cadastrado à mão, importar catálogo primeiro, PDF do Prompt Mestre sem IA, OCR, IA de imagem e de texto, página cheia, conferência, busca "cabos", painel, celular) | `npm run arquivos && npm run e2e` (nesta pasta) | site em `SITE` (padrão `http://localhost:8080`) e a API com a IA simulada (como acima) |
-| Acessibilidade (axe, WCAG AA; telas principais + importar + conferência, nos temas escuro, claro e Matrix) | `npm run acessibilidade` | o mesmo do teste de navegador |
+| Navegador ponta a ponta (39 passos: produto cadastrado à mão, importar catálogo primeiro, PDF do Prompt Mestre sem IA, OCR, IA de imagem e de texto, página cheia, conferência, busca "cabos", só parecido, buscas recentes, cotação em lista com pedido por fornecedor e planilha, painel, celular) | `npm run arquivos && npm run e2e` (nesta pasta) | site em `SITE` (padrão `http://localhost:8080`) e a API com a IA simulada (como acima) |
+| Acessibilidade (axe, WCAG AA; telas principais + busca só com parecidos + cotação em lista + importar + conferência, nos temas escuro, claro e Matrix) | `npm run acessibilidade` | o mesmo do teste de navegador |
 | Sistema fora do ar (aviso na posição certa; 4 páginas × 3 larguras × 3 temas) | `npm run fora-do-ar` | só o site em `SITE` (a API é simulada como fora do ar) |
 
 A IA simulada (`mock-openrouter.js`) tem atalhos para os testes: `POST /__reiniciar` recomeça a cota do dia e `POST /__demora?ms=N` deixa as respostas lentas (para ver a tela de progresso).
 
 Nunca rode os testes contra o banco de produção: eles criam contas e dados de teste.
-O GitHub roda os testes do leitor, da API e da leitura com IA a cada `git push` na `main` (`.github/workflows/testes.yml`).
+O GitHub roda os testes do leitor, da lista da cotação, da API e da leitura com IA a cada `git push` na `main` (`.github/workflows/testes.yml`).

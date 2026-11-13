@@ -38,8 +38,8 @@ jobs:
       - name: Auditoria de segurança das dependências
         working-directory: backend
         run: npm audit --omit=dev --audit-level=high
-      - name: Testar o leitor de catálogos e a versão
-        run: node testes/leitor.test.js && node testes/versao.test.js
+      - name: Testar o leitor de catálogos, a leitura da lista de cotação e a versão
+        run: node testes/leitor.test.js && node testes/cotacao.test.js && node testes/versao.test.js
       - name: Subir a API e testar
         run: |
           node backend/src/server.js > api.log 2>&1 &

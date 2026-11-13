@@ -61,9 +61,66 @@ async function api(method, path, body, token) {
   r = await api('POST', '/api/busca', { consulta: 'cabo PP 3x2,5mm' }, B);
   check(r.j.produtos.length === 0 && r.j.fornecedores.length === 0, 'B não vê dados de A');
 
+  console.log('3b) "tem" x "parecido" (a medida pedida precisa bater) e cotação em lista');
+  r = await api('POST', '/api/fornecedores', { nome: 'Rede Sul Cabos', whatsapp: '(51) 99999-0000', email: 'vendas@redesul.example' }, A);
+  const G = r.j.fornecedor.id;
+  for (const p of [
+    { nome: 'Cabo Flexível 4mm² 750V', codigo: 'FX-40', bitola: '4 mm²', tensao: '450/750 V', preco: 'R$ 3,80', unidade: 'metro' },
+    { nome: 'Cabo PP 3x2,5mm² 500V', codigo: 'RS-PP325', bitola: '3x2,5 mm²', tensao: '500 V' },
+    { nome: 'Fio rígido 750V', codigo: 'FR-25', bitola: '2,50', tensao: '750 V' }
+  ]) {
+    r = await api('POST', '/api/fornecedores/' + G + '/produtos', p, A);
+    if (r.s !== 201) check(false, 'cadastra ' + p.nome, r);
+  }
+  const forn = (resp, id) => (resp.j.fornecedores || []).filter(f => f.fornecedor_id === id)[0] || {};
+  r = await api('POST', '/api/busca', { consulta: 'cabo PP 3x2,5mm' }, A);
+  check(r.j.produtos[0].forte === true && r.j.total_com_item === 2 && forn(r, F).produtos_fortes === 1 && forn(r, G).produtos_fortes === 1 &&
+    forn(r, F).melhor.codigo === 'PP-325' && forn(r, G).melhor.codigo === 'RS-PP325',
+    '"cabo PP 3x2,5mm": os 2 fornecedores têm, cada um com o seu produto', [r.j.total_com_item, r.j.fornecedores]);
+  r = await api('POST', '/api/busca', { consulta: 'cabo flexível 4mm 750V' }, A);
+  check(r.j.total_com_item === 1 && r.j.total_com_parecido === 1 && forn(r, G).melhor.codigo === 'FX-40' && forn(r, G).melhor.forte === true &&
+    forn(r, F).produtos_fortes === 0 && forn(r, F).produtos_encontrados >= 1 && r.j.fornecedores[0].fornecedor_id === G,
+    '"cabo flexível 4mm": só um tem; quem tem 2,5mm aparece como parecido, depois', [r.j.total_com_item, r.j.total_com_parecido, r.j.fornecedores]);
+  r = await api('POST', '/api/busca', { consulta: 'cabo flexível 2,5mm 750V' }, A);
+  check(r.j.total_com_item === 1 && forn(r, F).melhor.codigo === 'FX-25' && forn(r, G).produtos_fortes === 0,
+    '"cabo flexível 2,5mm": fio rígido e cabo de 4mm não contam como "tem"', [r.j.total_com_item, r.j.produtos.map(x => [x.nome, x.score, x.forte])]);
+  r = await api('POST', '/api/busca', { consulta: 'fio rígido 2,5mm' }, A);
+  check(r.j.total_com_item === 1 && forn(r, G).melhor.codigo === 'FR-25',
+    'medida escrita "2,50" no catálogo é a mesma "2,5mm" da pergunta', [r.j.total_com_item, r.j.produtos.map(x => [x.nome, x.score, x.forte])]);
+  r = await api('POST', '/api/busca', { consulta: 'CABO DE COBRE FLEXÍVEL ISOLADO EM PVC, SEÇÃO NOMINAL 2,5 MM², TENSÃO 450/750 V, ANTICHAMA, COR VERMELHA, ROLO COM 100 METROS, CONFORME NBR NM 247-3' }, A);
+  check(r.j.total_com_item === 1 && r.j.produtos[0].codigo === 'FX-25' && r.j.produtos[0].forte === true,
+    'linha inteira de edital acha quem tem o item', [r.j.total_com_item, r.j.produtos.map(x => [x.nome, x.score, x.forte])]);
+  r = await api('POST', '/api/busca', { consulta: 'quem vende cabo pp 3x2,5?' }, A);
+  check(r.j.total_com_item === 2, 'pergunta em frase ("quem vende…") dá a mesma resposta', [r.j.total_com_item, r.j.termos]);
+  r = await api('POST', '/api/busca', { consulta: 'disjuntor 20A' }, A);
+  check(r.j.total_com_item === 0 && !(r.j.produtos || []).some(x => x.forte), 'item que ninguém tem: nenhum "tem"', r.j.produtos);
+  r = await api('POST', '/api/busca/responder', { consulta: 'cabo PP 3x2,5mm' }, A);
+  check(/^2 fornecedores cadastrados têm/.test(r.j.resposta) && /PP-325/.test(r.j.resposta) && /RS-PP325/.test(r.j.resposta), 'resposta começa por quantos têm', r.j.resposta);
+  r = await api('POST', '/api/busca/responder', { consulta: 'cabo flexível 10mm 750V' }, A);
+  check(/^Nenhum fornecedor cadastrado tem exatamente/.test(r.j.resposta), 'resposta diz que ninguém tem antes de citar os parecidos', r.j.resposta);
+
+  r = await api('POST', '/api/busca/lote', { itens: ['cabo PP 3x2,5mm', 'cabo flexível 4mm 750V', 'luva nitrílica tamanho G', '', 'cabo flexível 10mm 750V'] }, A);
+  const L = r.j.itens || [];
+  check(r.s === 200 && L.length === 5 && L[0].consulta === 'cabo PP 3x2,5mm', 'lista: uma resposta por item, na mesma ordem', r.j);
+  check(L[0] && L[0].tem.length === 2 && L[0].tem.some(f => f.nome === 'Flex Fast' && f.melhor.codigo === 'PP-325' && f.whatsapp_link) &&
+    L[0].tem.some(f => f.nome === 'Rede Sul Cabos' && f.email === 'vendas@redesul.example'), 'lista: item com 2 fornecedores, produto e contato de cada um', L[0]);
+  check(L[1] && L[1].tem.length === 1 && L[1].tem[0].nome === 'Rede Sul Cabos' && L[1].tem[0].melhor.preco === 'R$ 3,80', 'lista: item com 1 fornecedor e o preço do catálogo', L[1]);
+  check(L[2] && L[2].tem.length === 0 && L[2].parecidos.length === 0 && L[3].tem.length === 0 && L[4].tem.length === 0, 'lista: itens que ninguém tem voltam vazios', [L[2], L[3], L[4]]);
+  r = await api('POST', '/api/busca/lote', { itens: ['cabo PP 3x2,5mm'] }, B);
+  check(r.s === 200 && r.j.itens[0].tem.length === 0 && r.j.itens[0].parecidos.length === 0, 'lista: B não vê dados de A', r.j);
+  r = await api('POST', '/api/busca/lote', { itens: [] }, A);
+  const r2 = await api('POST', '/api/busca/lote', { itens: 'cabo' }, A);
+  const r3 = await api('POST', '/api/busca/lote', { itens: ['cabo'] });
+  check(r.s === 400 && r2.s === 400 && r3.s === 401, 'lista vazia = 400; sem login = 401', [r.s, r2.s, r3.s]);
+  r = await api('POST', '/api/busca/lote', { itens: Array.from({ length: 60 }, (_, i) => 'cabo flexível ' + (i + 1) + 'mm') }, A);
+  check(r.s === 200 && r.j.itens.length === 40, 'lista: no máximo 40 itens por chamada', r.j.itens && r.j.itens.length);
+  r = await api('DELETE', '/api/fornecedores/' + G, null, A);
+  check(r.s === 200, 'exclui o segundo fornecedor', r);
+
   console.log('4) IA (sem chave → resposta automática útil)');
   r = await api('POST', '/api/busca/responder', { consulta: 'cabo PP 3x2,5mm' }, A);
-  check(r.s === 200 && r.j.fallback === true && /PP-325/.test(r.j.resposta) && /WhatsApp/.test(r.j.resposta), 'resposta automática lista produto e contato', r.j.resposta);
+  check(r.s === 200 && r.j.fallback === true && /PP-325/.test(r.j.resposta) && /WhatsApp/.test(r.j.resposta) && /^1 fornecedor cadastrado tem/.test(r.j.resposta),
+    'resposta automática lista produto e contato', r.j.resposta);
 
   console.log('4b) produto cadastrado à mão e correção');
   r = await api('POST', '/api/fornecedores/' + F + '/produtos', { codigo: 'X' }, A);

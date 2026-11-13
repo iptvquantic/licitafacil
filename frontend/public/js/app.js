@@ -28,7 +28,7 @@ var ESTADO = {
   organizando: null
 };
 
-var TITULOS = { busca: 'Buscar produtos', importar: 'Importar catálogo', fornecedores: 'Fornecedores', detalhe: 'Fornecedor', config: 'Configurações', admin: 'Painel do dono' };
+var TITULOS = { busca: 'Buscar produtos', cotacao: 'Cotação em lista', importar: 'Importar catálogo', fornecedores: 'Fornecedores', detalhe: 'Fornecedor', config: 'Configurações', admin: 'Painel do dono' };
 var NOMES_PLANO = { trial: 'Teste grátis', mensal: 'Mensal', trimestral: 'Trimestral', anual: 'Anual' };
 var ORIGENS = {
   texto_colado: 'Texto colado', pdf_navegador: 'PDF lido no navegador', ocr_navegador: 'PDF escaneado (OCR)',
@@ -351,10 +351,11 @@ function rotear() {
     abrirFornecedor(parseInt(partes[1], 10), partes[2] || null);
     return;
   }
-  if (['busca', 'importar', 'fornecedores', 'config', 'admin'].indexOf(secao) < 0) secao = 'busca';
+  if (['busca', 'cotacao', 'importar', 'fornecedores', 'config', 'admin'].indexOf(secao) < 0) secao = 'busca';
   if (secao === 'admin' && !ESTADO.usuario.admin) secao = 'busca';
   mostrarSecao(secao);
   if (secao === 'busca') entrarBusca();
+  else if (secao === 'cotacao') mostrarCotacao();
   else if (secao === 'importar') mostrarImportacao('importar');
   else if (secao === 'fornecedores') carregarFornecedores();
   else if (secao === 'config') renderConfig();
@@ -424,8 +425,11 @@ function carregarStats() {
   return apiGet('/api/busca/stats').then(function (s) {
     ESTADO.stats = s;
     $('st-fornecedores').textContent = numero(s.total_fornecedores);
+    $('st-fornecedores-lbl').textContent = plural(s.total_fornecedores, 'fornecedor', 'fornecedores');
     $('st-produtos').textContent = numero(s.total_produtos);
+    $('st-produtos-lbl').textContent = plural(s.total_produtos, 'produto organizado', 'produtos organizados');
     $('st-catalogos').textContent = numero(s.total_catalogos);
+    $('st-catalogos-lbl').textContent = plural(s.total_catalogos, 'catálogo lido', 'catálogos lidos');
     renderOnboarding();
     if (!$('resultados').innerHTML) renderBuscaInicial();
     return s;
@@ -436,7 +440,7 @@ function renderOnboarding() {
   if (!s || s.total_catalogos > 0) { html('onboarding', ''); return; }
   var temForn = s.total_fornecedores > 0;
   function etapa(n, feita, titulo, texto, botao) {
-    return '<div class="etapa' + (feita ? ' feita' : '') + '"><div class="n">' + (feita ? 'FEITO ✓' : 'PASSO ' + n) + '</div><h4>' + titulo + '</h4><p>' + texto + '</p>' +
+    return '<div class="etapa' + (feita ? ' feita' : '') + '"><div class="n">' + (feita ? 'Feito' : 'Passo ' + n) + '</div><h4>' + titulo + '</h4><p>' + texto + '</p>' +
       (botao ? '<div class="mt-3">' + botao + '</div>' : '') + '</div>';
   }
   html('onboarding', '<div class="card mb-4 fade-in"><div class="card-header"><h2 class="card-title">Comece em 3 passos</h2></div><div class="onboarding">' +
@@ -448,12 +452,38 @@ function renderOnboarding() {
 }
 function renderBuscaInicial() {
   var s = ESTADO.stats;
-  if (s && s.total_catalogos === 0) { html('resultados', ''); return; }
-  html('resultados', caixaVazia(ICONES.busca, 'Pronto para buscar',
-    'Digite um produto, uma medida, uma norma ou um código. A busca entende <strong>3x2,5mm</strong>, <strong>3×2.5 mm²</strong> e <strong>NBR 6148</strong> do mesmo jeito.'));
+  if (s && s.total_catalogos === 0 && !s.total_produtos) { html('resultados', ''); return; }
+  html('resultados', caixaVazia(ICONES.busca, 'Digite o item e veja quem tem',
+    'Pode colar a linha do edital. A busca confere a medida e a tensão no catálogo de cada fornecedor e entende <strong>3x2,5mm</strong>, <strong>3×2.5 mm²</strong> e <strong>NBR 6148</strong> do mesmo jeito.'));
+}
+
+// Buscas recentes (neste navegador): voltam como atalhos no lugar dos exemplos
+var MAX_RECENTES = 6;
+function chaveRecentes() { return 'lf_buscas_' + (ESTADO.usuario ? ESTADO.usuario.id : '0'); }
+function lerRecentes() {
+  try {
+    var v = JSON.parse(localStorage.getItem(chaveRecentes()) || '[]');
+    return Array.isArray(v) ? v.filter(function (t) { return typeof t === 'string' && t.trim(); }).slice(0, MAX_RECENTES) : [];
+  } catch (e) { return []; }
+}
+function guardarRecente(q) {
+  var t = String(q || '').trim().slice(0, 120);
+  if (t.length < 2) return;
+  var lista = lerRecentes().filter(function (x) { return normalizar(x) !== normalizar(t); });
+  lista.unshift(t);
+  try { localStorage.setItem(chaveRecentes(), JSON.stringify(lista.slice(0, MAX_RECENTES))); } catch (e) { /* sem armazenamento: segue sem guardar */ }
+  renderDicasBusca();
+}
+function renderDicasBusca() {
+  var recentes = lerRecentes();
+  if (!recentes.length) return; // ficam os exemplos que já vêm na página
+  html('busca-dicas', '<span id="busca-dicas-rotulo">Buscas recentes:</span>' + recentes.map(function (t) {
+    return '<button type="button" class="chip-btn" data-acao="exemplo">' + esc(t) + '</button>';
+  }).join(''));
 }
 function entrarBusca() {
   carregarStats();
+  renderDicasBusca();
   if (!ehMobile()) setTimeout(function () { var c = $('campo-busca'); if (c && ESTADO.secao === 'busca') c.focus(); }, 60);
 }
 function usarExemplo(texto) {
@@ -478,6 +508,7 @@ function buscar(opcoes) {
   return apiPost('/api/busca', { consulta: q, limite: 30, limite_produtos: 100 }, { timeout: 60000 }).then(function (r) {
     if (seq !== ESTADO.buscaSeq) return null;
     renderResultados(r, q);
+    guardarRecente(q);
     return r;
   }).catch(function (err) {
     if (seq !== ESTADO.buscaSeq) return null;
@@ -497,7 +528,7 @@ function buscar(opcoes) {
 function linhaResultadoProduto(p, re) {
   var contato = htmlContatos(p.fornecedor, { compacto: true, produto: p.nome + (p.codigo ? ' (cód. ' + p.codigo + ')' : '') });
   var specs = spec('Medida', p.bitola, re, true) + spec('Tensão', p.tensao, re) + spec('Material', p.material, re) +
-    spec('Marca', p.marca, re) + (p.norma ? '<span class="norma">' + marcar(p.norma, re) + '</span>' : '');
+    spec('Marca', p.marca, re) + spec('Norma', p.norma, re);
   var preco = p.preco ? '<div class="preco">' + esc(p.preco) + '</div>' + (p.unidade ? '<div class="unid">' + esc(p.unidade) + '</div>' : '')
     : '<span class="text-sm text-muted">sob consulta</span>';
   return '<tr>' +
@@ -507,15 +538,22 @@ function linhaResultadoProduto(p, re) {
     '<td class="num">' + preco + '</td>' +
     '<td><div class="forn-mini"><button type="button" class="link-btn nome" data-acao="ver-fornecedor" data-id="' + esc(p.fornecedor.id) + '">' +
       esc(p.fornecedor.nome) + '</button>' + contato + '</div></td>' +
-    '<td class="centro"><span class="rel rel-' + esc(p.relevancia) + '" title="Quanto o produto combina com a busca">' + esc(p.score) + '%</span></td>' +
+    '<td class="centro">' + seloConfere(p) + '</td>' +
     '</tr>';
+}
+// O produto é o item pedido (medida, tensão e nome conferem) ou só parecido
+function ehForte(p) { return p.forte !== false; } // API antiga (sem o campo): conta como item pedido
+function seloConfere(p) {
+  return ehForte(p)
+    ? '<span class="confere sim" title="Medida, tensão e nome conferem com a busca">' + ICONES.ok + 'Sim</span>'
+    : '<span class="confere parecido" title="Medida, tensão ou tipo diferente: confira antes de pedir">Parecido</span>';
 }
 function cardResultadoProduto(p, re) {
   var specs = spec('Medida', p.bitola, re, true) + spec('Tensão', p.tensao, re) + spec('Material', p.material, re) +
-    (p.norma ? '<span class="norma">' + marcar(p.norma, re) + '</span>' : '');
+    spec('Norma', p.norma, re);
   return '<div class="p-card">' +
     '<div class="topo"><div><div class="prod-nome">' + marcar(p.nome, re) + '</div>' + (p.codigo ? '<span class="cod">' + marcar(p.codigo, re) + '</span>' : '') + '</div>' +
-      '<span class="rel rel-' + esc(p.relevancia) + '">' + esc(p.score) + '%</span></div>' +
+      seloConfere(p) + '</div>' +
     (specs ? '<div class="specs">' + specs + '</div>' : '') +
     (p.preco ? '<div><span class="preco">' + esc(p.preco) + '</span> <span class="unid">' + esc(p.unidade || '') + '</span></div>' : '') +
     '<div class="forn-mini"><button type="button" class="link-btn nome" data-acao="ver-fornecedor" data-id="' + esc(p.fornecedor.id) + '">' + esc(p.fornecedor.nome) + '</button>' +
@@ -577,18 +615,20 @@ function resumoProdutoBusca(p) {
     return v && nome.indexOf(normalizar(v).replace(/\s+/g, '')) < 0;
   }).join(' · ');
 }
-function seloRelevancia(item) {
-  return '<span class="rel rel-' + esc(item.relevancia) + '" title="Quanto combina com a busca">' + esc(item.score) + '%</span>';
-}
-// Uma linha por fornecedor: nome, o que ele tem (até 3 produtos ou o trecho do catálogo) e o contato direto
-function htmlLinhaFornecedor(f, q, prods, re) {
+function fortesDoFornecedor(f) { return f.produtos_fortes == null ? (f.produtos_encontrados || 0) : f.produtos_fortes; }
+// Uma linha por fornecedor: nome, o que ele tem (até 3 produtos ou o trecho do catálogo) e o contato direto.
+// modo 'tem' mostra só os produtos que são o item pedido; 'parecido', os outros.
+function htmlLinhaFornecedor(f, q, prods, re, modo) {
   var id = f.fornecedor_id || f.id;
-  var exemplo = prods[0] ? prods[0].nome + (prods[0].codigo ? ' (cód. ' + prods[0].codigo + ')' : '') : '';
-  var selo;
+  var lista = modo === 'tem' ? prods.filter(ehForte) : modo === 'parecido' ? prods.filter(function (p) { return !ehForte(p); }) : prods;
+  if (!lista.length) lista = prods;
+  var totalModo = modo === 'tem' ? fortesDoFornecedor(f) : (f.produtos_encontrados || 0) - (modo === 'parecido' ? fortesDoFornecedor(f) : 0);
+  var exemplo = lista[0] ? lista[0].nome + (lista[0].codigo ? ' (cód. ' + lista[0].codigo + ')' : '') : '';
+  var selo = '';
   var corpo = '';
   if (f.produtos_encontrados > 0) {
-    selo = '<span class="badge badge-blue">' + numero(f.produtos_encontrados) + ' ' + plural(f.produtos_encontrados, 'produto', 'produtos') + '</span>';
-    var mostrados = prods.slice(0, 3);
+    if (totalModo > 1) selo = '<span class="rf-qtd">' + numero(totalModo) + ' produtos</span>';
+    var mostrados = lista.slice(0, 3);
     corpo = '<ul class="rf-prods">' + mostrados.map(function (p) {
       var r = resumoProdutoBusca(p);
       return '<li><span class="rf-prod-nome">' + marcar(p.nome, re) + '</span>' +
@@ -596,7 +636,7 @@ function htmlLinhaFornecedor(f, q, prods, re) {
         (r ? '<span class="rf-spec">' + marcar(r, re) + '</span>' : '') +
         (p.preco ? '<span class="rf-preco">' + esc(p.preco) + (p.unidade ? ' / ' + esc(p.unidade) : '') + '</span>' : '') + '</li>';
     }).join('') + '</ul>';
-    var resto = f.produtos_encontrados - mostrados.length;
+    var resto = Math.max(totalModo, lista.length) - mostrados.length;
     if (resto > 0) {
       corpo += '<button type="button" class="link-btn rf-mais" data-acao="ver-fornecedor" data-id="' + esc(id) + '">+ ' + numero(resto) + ' ' +
         plural(resto, 'outro produto', 'outros produtos') + ' deste fornecedor</button>';
@@ -608,22 +648,22 @@ function htmlLinhaFornecedor(f, q, prods, re) {
   } else {
     var semCat = !f.total_catalogos;
     selo = semCat ? '<span class="badge badge-yellow">sem catálogo</span>'
-      : '<span class="badge badge-blue">' + numero(f.total_catalogos) + ' ' + plural(f.total_catalogos, 'catálogo', 'catálogos') + '</span>';
+      : '<span class="rf-qtd">' + numero(f.total_catalogos) + ' ' + plural(f.total_catalogos, 'catálogo', 'catálogos') + '</span>';
     corpo = f.observacoes ? '<p class="rf-trecho">' + marcar(f.observacoes, re) + '</p>' : '';
   }
   var acoes = '';
   if (!f.produtos_encontrados && !f.trecho && !f.total_catalogos) {
     acoes = '<button type="button" class="btn btn-secondary btn-sm" data-acao="adicionar-catalogo" data-id="' + esc(id) + '">' + ICONES.enviar + 'Adicionar catálogo</button>';
   }
-  return '<li class="res-forn-item">' +
+  return '<li class="res-forn-item' + (modo ? ' ' + modo : '') + '">' +
     '<div class="rf-info"><div class="rf-topo"><button type="button" class="link-btn rf-nome" data-acao="ver-fornecedor" data-id="' + esc(id) + '">' + esc(f.nome) + '</button>' +
-      selo + (f.relevancia && f.score != null && (f.produtos_encontrados || f.trecho) ? seloRelevancia(f) : '') + '</div>' + corpo + '</div>' +
+      selo + '</div>' + corpo + '</div>' +
     '<div class="rf-lado">' + htmlContatos(f, { emailCurto: true, produto: exemplo || q }) + acoes + '</div>' +
     '</li>';
 }
-function htmlListaFornecedores(lista, q, porForn, re) {
+function htmlListaFornecedores(lista, q, porForn, re, modo) {
   return '<ul class="res-forn">' + lista.map(function (f) {
-    return htmlLinhaFornecedor(f, q, porForn[f.fornecedor_id || f.id] || [], re);
+    return htmlLinhaFornecedor(f, q, porForn[f.fornecedor_id || f.id] || [], re, modo);
   }).join('') + '</ul>';
 }
 function renderResultados(r, q) {
@@ -634,15 +674,18 @@ function renderResultados(r, q) {
     var id = p.fornecedor && p.fornecedor.id;
     if (id) (porForn[id] = porForn[id] || []).push(p);
   });
-  var comProduto = (r.fornecedores || []).filter(function (f) { return f.produtos_encontrados > 0; });
-  var citados = (r.fornecedores || []).filter(function (f) { return !f.produtos_encontrados && f.trecho; });
+  var fornecedores = r.fornecedores || [];
+  var tem = fornecedores.filter(function (f) { return f.produtos_encontrados > 0 && fortesDoFornecedor(f) > 0; });
+  var parecidos = fornecedores.filter(function (f) { return f.produtos_encontrados > 0 && fortesDoFornecedor(f) === 0; });
+  var citados = fornecedores.filter(function (f) { return !f.produtos_encontrados && f.trecho; });
   var jaMostrados = {};
-  (r.fornecedores || []).forEach(function (f) { jaMostrados[f.fornecedor_id] = 1; });
+  fornecedores.forEach(function (f) { jaMostrados[f.fornecedor_id] = 1; });
   var relacionados = (r.fornecedores_relacionados || []).filter(function (f) { return !jaMostrados[f.id]; });
-  if (!produtos.length && !citados.length && !comProduto.length) {
+  ESTADO.cotacao = tem.length ? { q: q, fornecedores: tem, porForn: porForn } : null;
+  if (!produtos.length && !citados.length && !tem.length && !parecidos.length) {
     if (relacionados.length) {
-      html('resultados', '<div class="fade-in"><div class="banner info mb-4"><span>Nenhum fornecedor cadastrado tem “' + esc(q) +
-        '” no catálogo, mas estes trabalham com isso. Adicione o catálogo deles (ou cadastre o produto à mão) para ver medidas e preços.</span></div>' +
+      html('resultados', '<div class="fade-in"><div class="veredito-bloco"><h3 class="veredito nao">Nenhum fornecedor cadastrado tem “' + esc(q) + '” no catálogo</h3>' +
+        '<p class="veredito-sub">Estes trabalham com isso: importe o catálogo deles (ou cadastre o produto à mão) para ver medidas e preços.</p></div>' +
         '<div class="secao-titulo"><h3>Fornecedores do ramo</h3><span class="contagem">' + numero(relacionados.length) + ' ' + plural(relacionados.length, 'fornecedor', 'fornecedores') + '</span></div>' +
         htmlListaFornecedores(relacionados, q, {}, re) + '</div>');
       return;
@@ -655,15 +698,24 @@ function renderResultados(r, q) {
     return;
   }
   var partes = [];
-  ESTADO.cotacao = comProduto.length ? { q: q, fornecedores: comProduto, porForn: porForn } : null;
-  if (comProduto.length) {
-    partes.push('<div class="quem-tem mb-4"><div class="secao-titulo"><h3>' + numero(comProduto.length) + ' ' +
-      plural(comProduto.length, 'fornecedor tem', 'fornecedores têm') + ' “' + esc(q) + '”</h3>' +
-      '<span class="contagem">contato direto para a cotação</span></div>' + htmlAcoesCotacao(comProduto, q) +
-      htmlListaFornecedores(comProduto, q, porForn, re) + '</div>');
+  if (tem.length) {
+    var n = Math.max(tem.length, r.total_com_item || 0);
+    partes.push('<div class="quem-tem mb-4"><div class="veredito-bloco"><h3 class="veredito sim">' + numero(n) + ' ' +
+      plural(n, 'fornecedor tem', 'fornecedores têm') + ' “' + esc(q) + '”</h3>' +
+      '<p class="veredito-sub">' + (n > tem.length ? 'Mostrando os ' + numero(tem.length) + ' que mais combinam. ' : '') +
+      'Medida e tensão conferidas no catálogo de cada um. Peça a cotação direto daqui.</p></div>' +
+      htmlAcoesCotacao(tem, q) + htmlListaFornecedores(tem, q, porForn, re, 'tem') + '</div>');
+  } else if (parecidos.length) {
+    partes.push('<div class="veredito-bloco"><h3 class="veredito nao">Nenhum fornecedor cadastrado tem exatamente “' + esc(q) + '”</h3>' +
+      '<p class="veredito-sub">Há produtos parecidos, com medida, tensão ou tipo diferente. Confira antes de pedir.</p></div>');
+  }
+  if (parecidos.length) {
+    partes.push('<div class="mb-4"><div class="secao-titulo"><h3>' + (tem.length ? 'Também têm produto parecido' : 'Têm produto parecido') + '</h3>' +
+      '<span class="contagem">' + numero(parecidos.length) + ' ' + plural(parecidos.length, 'fornecedor', 'fornecedores') + '</span></div>' +
+      htmlListaFornecedores(parecidos, q, porForn, re, 'parecido') + '</div>');
   }
   if (citados.length) {
-    partes.push('<div class="mb-4"><div class="secao-titulo"><h3>' + (comProduto.length ? 'Também citam “' + esc(q) + '” no catálogo' : 'Citado nos catálogos de') +
+    partes.push('<div class="mb-4"><div class="secao-titulo"><h3>' + (tem.length || parecidos.length ? 'Também citam “' + esc(q) + '” no catálogo' : 'Citado nos catálogos de') +
       '</h3><span class="contagem">texto do catálogo, sem produto organizado</span></div>' + htmlListaFornecedores(citados, q, {}, re) + '</div>');
   }
   if (produtos.length) {
@@ -671,7 +723,7 @@ function renderResultados(r, q) {
       (r.total_produtos > produtos.length ? 'mostrando ' + produtos.length + ' de ' + numero(r.total_produtos) : numero(produtos.length) + ' ' + plural(produtos.length, 'produto', 'produtos')) +
       '</span></div>');
     partes.push('<div class="tabela-produtos-wrap mb-4"><div class="table-wrap"><table class="tabela"><caption class="sr-only">Produtos encontrados para ' + esc(q) + '</caption>' +
-      '<thead><tr><th scope="col">Produto</th><th scope="col">Especificações</th><th scope="col" class="num">Preço</th><th scope="col">Fornecedor</th><th scope="col" class="centro">Combina</th></tr></thead><tbody>' +
+      '<thead><tr><th scope="col">Produto</th><th scope="col">Especificações</th><th scope="col" class="num">Preço</th><th scope="col">Fornecedor</th><th scope="col" class="centro">Confere</th></tr></thead><tbody>' +
       produtos.map(function (p) { return linhaResultadoProduto(p, re); }).join('') + '</tbody></table></div>' +
       '<div class="lista-cards">' + produtos.map(function (p) { return cardResultadoProduto(p, re); }).join('') + '</div></div>');
   }
@@ -1018,7 +1070,7 @@ function renderProdutos() {
       '</tr>';
   }).join(''));
   html('cards-produtos', visiveis.map(function (p) {
-    var specs = spec('Medida', p.bitola, re, true) + spec('Tensão', p.tensao, re) + spec('Material', p.material, re) + (p.norma ? '<span class="norma">' + marcar(p.norma, re) + '</span>' : '');
+    var specs = spec('Medida', p.bitola, re, true) + spec('Tensão', p.tensao, re) + spec('Material', p.material, re) + spec('Norma', p.norma, re);
     return '<div class="p-card"><div class="topo"><div><div class="prod-nome">' + marcar(p.nome, re) + '</div>' + (p.codigo ? '<span class="cod">' + marcar(p.codigo, re) + '</span>' : '') + '</div>' +
       (p.preco ? '<div class="num"><div class="preco">' + esc(p.preco) + '</div><div class="unid">' + esc(p.unidade || '') + '</div></div>' : '') + '</div>' +
       (specs ? '<div class="specs">' + specs + '</div>' : '') +
@@ -2347,6 +2399,14 @@ function aoClicar(e) {
     case 'copiar-prompt': copiarPromptMestre(el); break;
     case 'cotacao-mensagem': copiarCotacao('mensagem', el); break;
     case 'cotacao-contatos': copiarCotacao('contatos', el); break;
+    case 'cot-limpar': limparCotacao(); break;
+    case 'cot-exemplo': usarExemploCotacao(); break;
+    case 'cot-copiar': copiarPedidoCotacao(el.getAttribute('data-fid'), el); break;
+    case 'cot-email': copiarPedidoCotacao(el.getAttribute('data-fid'), el, true); break; // o link de e-mail abre normalmente
+    case 'cot-copiar-faltando': copiarItensFaltando(); break;
+    case 'cot-planilha': baixarPlanilhaCotacao(); break;
+    case 'cot-buscar-item': buscarItemCotacao(el.getAttribute('data-i')); break;
+    case 'cot-de-novo': analisarCotacao(); break;
     case 'indexar-colado': indexarColado(); break;
     case 'imp-comecar': comecarLeitura(); break;
     case 'imp-cancelar': cancelarImportacao(); el.disabled = true; el.textContent = 'Cancelando…'; break;
@@ -2421,6 +2481,8 @@ function ligarDropzone(idZona, idInput, tela) {
 function ligarEventos() {
   document.addEventListener('click', aoClicar);
   $('form-busca').addEventListener('submit', function (e) { e.preventDefault(); buscar(); });
+  $('form-cotacao').addEventListener('submit', function (e) { e.preventDefault(); analisarCotacao(); });
+  $('cot-itens').addEventListener('input', debounce(atualizarContagemCotacao, 200));
   $('campo-busca').addEventListener('focus', acordarServidor, { once: true });
   $('filtro-fornecedores').addEventListener('input', debounce(renderFornecedores, 120));
   $('filtro-produtos').addEventListener('input', debounce(function () { ESTADO.produtosLimite = 200; renderProdutos(); }, 150));
@@ -2462,7 +2524,7 @@ window.addEventListener('error', function (ev) {
 });
 
 // ─── Versão nova publicada: avisa para atualizar (a tela aberta há horas continua com o código antigo) ───
-var VERSAO_APP = '3.5.0'; // igual ao ?v= dos arquivos e à versão da API (conferido pelo teste testes/versao.test.js)
+var VERSAO_APP = '3.6.0'; // igual ao ?v= dos arquivos e à versão da API (conferido pelo teste testes/versao.test.js)
 function compararVersao(a, b) {
   var x = String(a || '0').split('.'), y = String(b || '0').split('.');
   for (var i = 0; i < 3; i++) {

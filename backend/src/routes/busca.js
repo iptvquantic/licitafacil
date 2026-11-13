@@ -3,7 +3,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { requireAuth, requireAcesso } = require('../middleware/auth');
-const { buscar, getStats } = require('../services/busca.service');
+const { buscar, buscarLote, getStats } = require('../services/busca.service');
 const { perguntarIA } = require('../services/ai.service');
 
 const router = express.Router();
@@ -29,7 +29,7 @@ router.get('/stats', async (req, res) => {
 // POST /api/busca { consulta, limite, fornecedor_id }
 router.post('/', requireAcesso, async (req, res) => {
   try {
-    const consulta = String(req.body.consulta || '').trim().slice(0, 200);
+    const consulta = String(req.body.consulta || '').trim().slice(0, 300); // cabe a linha inteira de um edital
     if (consulta.length < 2) return res.status(400).json({ error: 'Digite pelo menos 2 caracteres.' });
     const out = await buscar(consulta, req.usuario.id, {
       limiteProdutos: req.body.limite_produtos || 40,
@@ -40,6 +40,20 @@ router.post('/', requireAcesso, async (req, res) => {
   } catch (err) {
     console.error('Erro na busca:', err.message);
     res.status(500).json({ error: 'Erro ao buscar. Tente de novo.' });
+  }
+});
+
+// POST /api/busca/lote { itens: ["cabo pp 3x2,5mm", …] } — cotação: quem tem cada item (até 40 itens por chamada)
+router.post('/lote', requireAcesso, async (req, res) => {
+  try {
+    // a resposta vem na mesma ordem e com o mesmo tamanho da lista enviada (item em branco volta sem fornecedor)
+    const itens = (Array.isArray(req.body.itens) ? req.body.itens : []).slice(0, 40)
+      .map(function (v) { return typeof v === 'string' || typeof v === 'number' ? String(v).trim().slice(0, 300) : ''; });
+    if (!itens.some(function (v) { return v.length >= 2; })) return res.status(400).json({ error: 'Informe pelo menos um item.' });
+    res.json({ itens: await buscarLote(itens, req.usuario.id) });
+  } catch (err) {
+    console.error('Erro na cotação em lista:', err.message);
+    res.status(500).json({ error: 'Erro ao conferir os itens. Tente de novo.' });
   }
 });
 

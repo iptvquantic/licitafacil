@@ -1,6 +1,6 @@
 # LicitaFácil
 
-SaaS para equipes de compras e licitação: importe o catálogo do fornecedor (PDF com texto, PDF escaneado ou foto), a IA lê página por página, cadastra o fornecedor e organiza os produtos; depois encontre produtos por medida, norma ou código, indo direto ao contato de quem vende.
+SaaS para equipes de compras e licitação: importe o catálogo do fornecedor (PDF com texto, PDF escaneado ou foto), a IA lê página por página, cadastra o fornecedor e organiza os produtos; depois pergunte por um item (medida, norma, código ou a linha do edital) ou cole a lista inteira da cotação, e veja **quem tem e quem não tem** cada item, com o pedido pronto para mandar a cada fornecedor.
 
 ## Como funciona
 
@@ -34,11 +34,11 @@ cd frontend && npx serve public -p 8080   # site em http://localhost:8080 (usa a
 - `POST /api/fornecedores/:id/produtos` (produto cadastrado à mão), `PUT|DELETE /api/fornecedores/:id/produtos/:pid` (corrigir ou excluir qualquer produto)
 - `GET /api/extracao/capacidades`, `POST /api/extracao/pagina` (1 página lida pela IA), `POST /api/extracao/estruturar-bloco`, `POST /api/extracao/analisar` (sem IA), `POST /api/extracao/fornecedor`, `POST /api/extracao/importar`
 - `POST /api/extracao/texto/:fornecedorId` (texto colado), `POST /api/extracao/catalogo/:fornecedorId` (PDF lido no servidor, sem guardar)
-- `POST /api/busca`, `POST /api/busca/responder`, `GET /api/busca/stats`
+- `POST /api/busca` (diz quais fornecedores **têm** o item, com a medida conferida, e quais têm só parecido), `POST /api/busca/lote` (Cotação em lista: até 40 itens por chamada), `POST /api/busca/responder`, `GET /api/busca/stats`
 - `/api/admin/*` (somente `ADMIN_EMAILS`)
 - `GET /api/health` (consulta o banco e informa a configuração; a Action diária do GitHub mantém o Supabase ativo)
 
-Testes: veja `testes/README.md` (leitor, API, leitura com IA simulada, Gemini simulado, navegador ponta a ponta, acessibilidade).
+Testes: veja `testes/README.md` (leitor, lista da cotação, API, leitura com IA simulada, Gemini simulado, navegador ponta a ponta, acessibilidade).
 
 ## IA da leitura de catálogos
 

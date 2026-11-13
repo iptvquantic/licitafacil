@@ -441,11 +441,17 @@ function contatoTexto(f) {
 
 function respostaSemIA(consulta, r) {
   if (r.produtos.length) {
-    const linhas = r.produtos.slice(0, 6).map(function (p, i) {
+    // primeiro a resposta que interessa: tem ou não tem; depois quem (os que são o item pedido antes dos parecidos)
+    const fortes = r.produtos.filter(function (p) { return p.forte; });
+    const n = r.total_com_item || 0;
+    const abertura = fortes.length
+      ? (n === 1 ? '1 fornecedor cadastrado tem' : n + ' fornecedores cadastrados têm') + ' "' + consulta + '":'
+      : 'Nenhum fornecedor cadastrado tem exatamente "' + consulta + '". Os produtos mais parecidos:';
+    const linhas = (fortes.length ? fortes : r.produtos).slice(0, 6).map(function (p, i) {
       const contato = contatoTexto(p.fornecedor);
       return (i + 1) + '. ' + linhaProduto(p) + '\n   Fornecedor: ' + p.fornecedor.nome + (contato ? ' — ' + contato : '');
     });
-    return 'Encontrei ' + r.total_produtos + ' produto(s) para "' + consulta + '":\n\n' + linhas.join('\n');
+    return abertura + '\n\n' + linhas.join('\n');
   }
   if (r.fornecedores.length) {
     const linhasF = r.fornecedores.slice(0, 4).map(function (f, i) {
@@ -476,7 +482,7 @@ async function perguntarIA(consulta, usuarioId, fornecedorId) {
   }
   const contexto = [];
   r.produtos.slice(0, 12).forEach(function (p) {
-    contexto.push('- ' + linhaProduto(p) + ' | Fornecedor: ' + p.fornecedor.nome + (contatoTexto(p.fornecedor) ? ' | Contato: ' + contatoTexto(p.fornecedor) : ''));
+    contexto.push('- ' + (p.forte ? '[TEM] ' : '[PARECIDO] ') + linhaProduto(p) + ' | Fornecedor: ' + p.fornecedor.nome + (contatoTexto(p.fornecedor) ? ' | Contato: ' + contatoTexto(p.fornecedor) : ''));
   });
   r.fornecedores.filter(function (f) { return f.trecho && !f.produtos_encontrados; }).slice(0, 4).forEach(function (f) {
     contexto.push('- Trecho do catálogo de ' + f.nome + (contatoTexto(f) ? ' (' + contatoTexto(f) + ')' : '') + ': ' + f.trecho.replace(/\s*\n\s*/g, ' · '));
@@ -487,8 +493,12 @@ async function perguntarIA(consulta, usuarioId, fornecedorId) {
   });
   const sistema = 'Você é o assistente de compras e licitações do LicitaFácil. Responda em português do Brasil, direto e curto (até 10 linhas). ' +
     'Use SOMENTE os dados fornecidos; nunca invente produto, preço, norma ou contato. Cite o fornecedor e o contato de cada item recomendado. ' +
-    'Se a informação pedida não estiver nos dados, diga exatamente o que falta. Não use tabelas nem markdown.';
-  const usuario = 'Pergunta: ' + consulta + '\n\nDados encontrados:\n' + contexto.join('\n');
+    'Se a informação pedida não estiver nos dados, diga exatamente o que falta. Não use tabelas nem markdown. ' +
+    'Cada produto vem marcado: [TEM] é o item pedido (nome e medidas conferem); [PARECIDO] é só parecido (medida, tensão ou tipo diferente). ' +
+    'Comece pela resposta: quantos fornecedores TÊM o item e quais, com o contato. Se nenhum produto estiver marcado [TEM], diga primeiro que ' +
+    'nenhum fornecedor cadastrado tem exatamente o item e só depois cite os parecidos, dizendo o que é diferente. Não escreva as marcas [TEM] e [PARECIDO] na resposta.';
+  const usuario = 'Pergunta: ' + consulta + '\n\nFornecedores que têm o item pedido: ' + (r.total_com_item || 0) +
+    '\n\nDados encontrados:\n' + contexto.join('\n');
   try {
     const ia = await chamarIA([{ role: 'system', content: sistema }, { role: 'user', content: usuario }], { maxTokens: 1200 });
     return { resposta: ia.texto, modelo: ia.modelo, fontes: fontes, produtos: r.produtos.slice(0, 6), fallback: false };

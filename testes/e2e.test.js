@@ -389,10 +389,26 @@ async function salvarCatalogo(page, area) {
     esperar(/Distribuidora Paulista de Cabos/.test(t) && /sem catálogo/.test(t), 'fornecedor do ramo sem catálogo não apareceu');
     await page.screenshot({ path: path.join(FOTOS, '11-busca-cabos.png'), fullPage: true });
   }, page);
-  await passo('exemplo vazio mostra mensagem útil', async () => {
-    await page.click('.chip-btn:has-text("cimento CP-III")');
+  await passo('item que ninguém tem: resposta clara; buscas recentes viram atalhos', async () => {
+    await page.waitForSelector('#busca-dicas .chip-btn:has-text("cabos")', { timeout: 5000 });
+    esperar(/Buscas recentes/.test(await texto(page, '#busca-dicas')), 'rótulo das buscas recentes');
+    await page.fill('#campo-busca', 'cimento CP-III');
+    await page.click('#btn-buscar');
     await page.waitForSelector('#resultados .empty-box', { timeout: 15000 });
     esperar(/Nenhum fornecedor cadastrado tem “cimento CP-III”/.test(await texto(page, '#resultados')), 'mensagem de vazio diz que nenhum fornecedor tem o produto');
+    await page.click('#busca-dicas .chip-btn:has-text("cabos")');
+    await page.waitForSelector('#resultados .quem-tem', { timeout: 15000 });
+    esperar(await page.inputValue('#campo-busca') === 'cabos', 'atalho da busca recente preenche o campo');
+  }, page);
+  await passo('medida diferente: "não tem exatamente" e os parecidos', async () => {
+    await page.fill('#campo-busca', 'cabo flexível 10mm 750V');
+    await page.click('#btn-buscar');
+    await page.waitForSelector('#resultados .veredito', { timeout: 15000 });
+    const t = await texto(page, '#resultados');
+    esperar(/Nenhum fornecedor cadastrado tem exatamente “cabo flexível 10mm 750V”/.test(t) && /Têm produto parecido/.test(t) && !/fornecedores? têm/.test(t), 'parecidos: ' + t.slice(0, 400));
+    esperar(await page.locator('#resultados .res-forn-item.parecido').count() >= 1, 'fornecedor com produto parecido marcado');
+    esperar(await page.locator('#resultados .tabela .confere.parecido').count() >= 1 && await page.locator('#resultados .tabela .confere.sim').count() === 0, 'tabela marca "Parecido"');
+    await page.screenshot({ path: path.join(FOTOS, '11b-busca-parecido.png'), fullPage: true });
   }, page);
   await passo('perguntar à IA responde com fornecedor citado', async () => {
     await page.fill('#campo-busca', 'quem tem cabo PP 3x2,5mm?');
@@ -401,6 +417,43 @@ async function salvarCatalogo(page, area) {
     const t = await texto(page, '#ia-area');
     esperar(/Flex Fast/.test(t), 'resposta IA: ' + t);
     await page.screenshot({ path: path.join(FOTOS, '12-ia.png') });
+  }, page);
+  await passo('cotação em lista: quem tem cada item e pedido pronto por fornecedor', async () => {
+    await page.click('#nav-cotacao');
+    await page.waitForSelector('#secao-cotacao:not(.hidden)');
+    await page.fill('#cot-itens', 'ITEM\tDESCRIÇÃO\tUNID\tQTD\n1\tCabo PP 3x2,5mm²\tm\t300\n2. cabo flexível 2,5mm 750V - 200 m\ncabo flexível 10mm 750V - 50 m\ncimento CP-III - 40 sacos\ncabo pp 3x2,5mm²');
+    await page.waitForFunction(() => /^4 itens/.test(document.getElementById('cot-contagem').textContent));
+    await page.click('#btn-cotacao');
+    await page.waitForSelector('#cot-resultado .cot-lista', { timeout: 30000 });
+    const t = await texto(page, '#cot-resultado');
+    esperar(/Você tem fornecedor para 2 de 4 itens/.test(t), 'resumo: ' + t.slice(0, 300));
+    const linhas = page.locator('#cot-resultado .cot-linha');
+    esperar(await linhas.count() === 4, 'uma linha por item');
+    const l1 = await linhas.nth(0).innerText();
+    esperar(/Cabo PP 3x2,5mm²/.test(l1) && /300 m/.test(l1) && /Flex Fast/.test(l1) && /Energy/.test(l1) && /PP-325/.test(l1), 'item 1: ' + l1);
+    esperar(await linhas.nth(1).evaluate(e => e.classList.contains('tem')) && /FX-25/.test(await linhas.nth(1).innerText()), 'item 2 tem (FX-25)');
+    esperar(!(await linhas.nth(2).evaluate(e => e.classList.contains('tem'))) && /Nenhum fornecedor cadastrado tem/.test(await linhas.nth(2).innerText()), 'item 3 (medida que ninguém tem) não conta como "tem"');
+    esperar(await linhas.nth(3).evaluate(e => e.classList.contains('falta')), 'item 4 sem fornecedor');
+    const pedidos = page.locator('#cot-resultado .cot-pedido');
+    esperar(await pedidos.count() === 2, 'um pedido por fornecedor que tem');
+    const pedFlex = pedidos.filter({ hasText: 'Flex Fast' }).first();
+    esperar(/tem 2 de 4 itens/.test(await pedFlex.innerText()), 'pedido da Flex Fast com 2 itens');
+    const wa = decodeURIComponent(await pedFlex.locator('a.btn-whats').getAttribute('href'));
+    esperar(/^https:\/\/wa\.me\/5511957808642\?text=/.test(wa) && /1\. Cabo PP 3x2,5mm² — 300 m \(ref\. PP-325\)/.test(wa) && /2\. cabo flexível 2,5mm 750V — 200 m \(ref\. FX-25\)/.test(wa), 'WhatsApp com o pedido: ' + wa);
+    await pedFlex.locator('[data-acao="cot-copiar"]').click();
+    await page.waitForFunction(() => /Pedido para Flex Fast[^.]* copiado/.test(document.getElementById('toast-container').textContent));
+    const ped = await page.evaluate(() => navigator.clipboard.readText());
+    esperar(/Gostaria de uma cotação destes itens/.test(ped) && /PP-325/.test(ped) && /Prazo de entrega/.test(ped), 'pedido copiado: ' + ped.slice(0, 300));
+    esperar(/Sem fornecedor cadastrado/.test(t) && /cimento CP-III/.test(await texto(page, '#cot-resultado .cot-faltando')), 'lista do que falta');
+    const [down] = await Promise.all([page.waitForEvent('download', { timeout: 10000 }), page.click('#cot-resultado [data-acao="cot-planilha"]')]);
+    esperar(/^cotacao-\d{4}-\d{2}-\d{2}\.csv$/.test(down.suggestedFilename()), 'planilha: ' + down.suggestedFilename());
+    await page.screenshot({ path: path.join(FOTOS, '12b-cotacao.png'), fullPage: true });
+    await linhas.nth(1).locator('[data-acao="cot-buscar-item"]').click();
+    await page.waitForSelector('#secao-busca:not(.hidden) #resultados .quem-tem', { timeout: 15000 });
+    esperar(await page.inputValue('#campo-busca') === 'cabo flexível 2,5mm 750V' && /2 fornecedores têm/.test(await texto(page, '#resultados .quem-tem')), 'item aberto na busca');
+    await page.click('#nav-cotacao');
+    await page.waitForSelector('#secao-cotacao:not(.hidden) #cot-resultado .cot-lista');
+    esperar(/cimento CP-III/.test(await page.inputValue('#cot-itens')), 'a lista continua na tela ao voltar');
   }, page);
 
   console.log('9) Fornecedores, edição e configurações');

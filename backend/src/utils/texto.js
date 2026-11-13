@@ -5,7 +5,14 @@ var STOPWORDS = new Set(['de', 'da', 'do', 'das', 'dos', 'em', 'na', 'no', 'nas'
   'para', 'com', 'por', 'se', 'ao', 'aos', 'ou', 'mas', 'mais', 'como', 'seu', 'sua', 'seus', 'suas', 'este', 'esta', 'estes', 'estas',
   'esse', 'essa', 'isso', 'ele', 'ela', 'eles', 'elas', 'foi', 'ser', 'ter', 'nao', 'me', 'te', 'lhe', 'quando', 'onde', 'qual',
   'quais', 'tem', 'ha', 'preciso', 'quero', 'procuro', 'algum', 'alguma', 'fornecedor', 'fornecedores', 'produto', 'produtos',
-  'informado', 'sobre', 'entre', 'pelo', 'pela', 'the', 'and', 'for', 'of']);
+  'informado', 'sobre', 'entre', 'pelo', 'pela', 'the', 'and', 'for', 'of',
+  // palavras de edital que não identificam o produto ("aquisição de…", "conforme…", "tipo…", "cor…")
+  'aquisicao', 'fornecimento', 'conforme', 'tipo', 'similar', 'equivalente', 'contendo', 'aproximadamente', 'referencia',
+  'marca', 'modelo', 'cor', 'item', 'descricao', 'especificacao', 'especificacoes', 'minimo', 'maximo', 'cada', 'sendo',
+  'deve', 'devera', 'demais', 'qualidade',
+  // palavras da pergunta, não do produto ("quem vende…", "preço de…", "cotar…")
+  'quem', 'alguem', 'vende', 'vendem', 'fornece', 'fornecem', 'trabalha', 'trabalham', 'existe', 'cadastrado', 'cadastrados',
+  'cotar', 'cotacao', 'orcamento', 'comprar', 'preco', 'precos']);
 
 function semAcento(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, ''); }
 
@@ -16,6 +23,8 @@ function normalizarBusca(s) {
     .replace(/²/g, '2').replace(/³/g, '3')
     .replace(/[º°]/g, ' ')
     .replace(/(\d),(\d)/g, '$1.$2')
+    // zero à direita da vírgula não muda a medida: "2,50 mm²" = "2,5 mm²", "4,0" = "4" (três casas, "1.000", é milhar e fica)
+    .replace(/(\d+)\.(\d{1,2})(?![\d.])/g, function (m, a, b) { var d = b.replace(/0+$/, ''); return d ? a + '.' + d : a; })
     .replace(/(\d)\s*x\s*(?=\d)/g, '$1x')
     .replace(/(\d)\s+(mm2|mm|kv|kva|v|a|w|kw|m|kg|cm|pol|awg|hz)\b/g, '$1$2')
     .replace(/\s+/g, ' ')
@@ -103,10 +112,18 @@ function gruposBusca(texto) {
     variantes(t, 'consulta').forEach(function (v) {
       raizes(limparToken(v)).forEach(function (r) { if (tokenValido(r) && vars.indexOf(r) < 0) vars.push(r); });
     });
-    if (vars.length) grupos.push({ termo: t, variantes: vars, tecnico: /\d/.test(t) });
+    if (vars.length) grupos.push({ termo: t, variantes: vars, tecnico: /\d/.test(t), decisivo: ehDecisivo(t) });
   });
-  return grupos.slice(0, 12);
+  if (grupos.length <= 12) return grupos;
+  // descrição longa (item de edital): as medidas ficam, mesmo que apareçam no fim da frase
+  var tec = grupos.filter(function (g) { return g.tecnico; }).slice(0, 8);
+  var nomes = grupos.filter(function (g) { return !g.tecnico; }).slice(0, 12 - tec.length);
+  return grupos.filter(function (g) { return tec.indexOf(g) >= 0 || nomes.indexOf(g) >= 0; });
 }
+
+// Termo que decide se é o mesmo produto: medida com unidade ("2.5mm2", "750v", "20a", "0.6/1kv") ou formação ("3x2.5")
+var RE_DECISIVO = /^\d+(?:\.\d+)?(?:x\d+(?:\.\d+)?)+[a-z0-9]*$|^\d+(?:\.\d+)?(?:\/\d+(?:\.\d+)?)*(?:mm2|mm|cm|kv|kva|v|a|w|kw|awg|pol|hz)$/;
+function ehDecisivo(t) { return RE_DECISIVO.test(String(t || '')); }
 
 // Lista plana de tokens (compatível com versões anteriores)
 function tokensBusca(texto) { return Array.from(tokensDoc(texto)); }
@@ -151,6 +168,7 @@ module.exports = {
   normalizarBusca: normalizarBusca,
   tokensDoc: tokensDoc,
   gruposBusca: gruposBusca,
+  ehDecisivo: ehDecisivo,
   tokensBusca: tokensBusca,
   ehTecnico: ehTecnico,
   tokenizar: tokenizar,
