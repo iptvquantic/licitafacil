@@ -1,6 +1,8 @@
 name: Manter banco ativo
 # O Supabase grátis pausa o projeto quando não vê atividade no banco durante 7 dias (pausou em 12/11/2026 com 1 consulta por dia).
 # Agora: 4 vezes por dia, lendo as tabelas de verdade (?manter=1). Se o banco não responder, a execução FALHA e o GitHub avisa por e-mail.
+# Só pela API da Vercel (a que o site usa): o Render é reserva e cada acesso a ele gasta ~15 min das 750 h grátis do mês da conta,
+# que agora vão para manter o CREDIX acordado (NEXUS HUB, migração 06). Se a Vercel falhar, o site acorda o Render sozinho.
 on:
   schedule:
     - cron: '17 1,7,13,19 * * *'   # 4 vezes por dia (22:17, 04:17, 10:17 e 16:17 de Brasília)
@@ -14,7 +16,7 @@ jobs:
       - name: Consultar a API (toca o banco)
         run: |
           ok=0
-          for url in "https://licitafacil-one.vercel.app/api/health?manter=1" "https://licitafacil-api-kxks.onrender.com/api/health?manter=1"; do
+          for url in "https://licitafacil-one.vercel.app/api/health?manter=1"; do
             codigo=$(curl -s -m 90 -o resposta.json -w "%{http_code}" "$url" || echo "000")
             echo "$codigo $url $(head -c 200 resposta.json 2>/dev/null)"
             if [ "$codigo" = "200" ]; then ok=1; fi
