@@ -9,7 +9,7 @@
 | Google Gemini simulado (13 verificações: Gemini primeiro, chave errada cai para o OpenRouter, limite diário passa para o próximo modelo, motivos de cada falha) | `node testes/gemini.test.js` | o mock (porta 4010) e as variáveis do banco (`DATABASE_URL`, `JWT_SECRET`): o teste sobe a própria API nas portas 3011–3014 |
 | Navegador ponta a ponta (39 passos: produto cadastrado à mão, importar catálogo primeiro, PDF do Prompt Mestre sem IA, OCR, IA de imagem e de texto, página cheia, conferência, busca "cabos", só parecido, buscas recentes, cotação em lista com pedido por fornecedor e planilha, painel, celular) | `npm run arquivos && npm run e2e` (nesta pasta) | site em `SITE` (padrão `http://localhost:8080`) e a API com a IA simulada (como acima) |
 | Acessibilidade (axe, WCAG AA; telas principais + busca só com parecidos + cotação em lista + importar + conferência, nos temas escuro, claro e Matrix) | `npm run acessibilidade` | o mesmo do teste de navegador |
-| Sistema fora do ar (aviso na posição certa; 4 páginas × 3 larguras × 3 temas) | `npm run fora-do-ar` | só o site em `SITE` (a API é simulada como fora do ar) |
+| Sistema fora do ar (aviso na posição certa; 4 páginas × 3 larguras × 3 temas; e banco fora com a API no ar: aviso próprio + "Sou o administrador: como resolver" — 42 casos) | `npm run fora-do-ar` | só o site em `SITE` (a API é simulada como fora do ar) |
 
 A IA simulada (`mock-openrouter.js`) tem atalhos para os testes: `POST /__reiniciar` recomeça a cota do dia e `POST /__demora?ms=N` deixa as respostas lentas (para ver a tela de progresso).
 

@@ -1,6 +1,7 @@
 // Sistema fora do ar: o aviso aparece na coluna do formulário (entre a marca e o cartão),
 // sem rolagem lateral, no tema escolhido, sem erros de JS e sem violações graves de acessibilidade.
-// Testa 4 páginas de entrada × 3 larguras (celular, tablet, computador) × 3 temas.
+// Testa 4 páginas de entrada × 3 larguras (celular, tablet, computador) × 3 temas, com a API fora do ar,
+// e o login com a API no ar mas o banco fora (Supabase pausado): aviso próprio + dica do administrador.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -15,12 +16,20 @@ const AXE = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
   for (const pagina of ['login.html', 'cadastro.html', 'recuperar.html', 'resetar.html?token=teste'])
     for (const largura of [375, 768, 1280])
       for (const tema of ['dark', 'light', 'matrix']) casos.push({ pagina, largura, tema });
+  for (const largura of [375, 1280])
+    for (const tema of ['dark', 'light', 'matrix']) casos.push({ pagina: 'login.html', largura, tema, bancoFora: true });
   let falhas = 0;
   for (const c of casos) {
     const ctx = await b.newContext({ locale: 'pt-BR', viewport: { width: c.largura, height: 800 } });
     await ctx.addInitScript(t => { try { localStorage.setItem('tema', t); } catch (e) { /* ignora */ } }, c.tema);
     await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
-    await ctx.route(/\/api\//, r => r.abort()); // simula a API fora do ar
+    if (c.bancoFora) { // API no ar, banco fora (o que acontece quando o Supabase pausa o projeto)
+      await ctx.route(/\/api\//, r => /\/api\/health/.test(r.request().url())
+        ? r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'degradado', db: 'erro', db_ms: null, config: { banco: true, jwt: true }, version: 'teste' }) })
+        : r.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Erro interno"}' }));
+    } else {
+      await ctx.route(/\/api\//, r => r.abort()); // simula a API fora do ar
+    }
     const p = await ctx.newPage();
     const erros = [];
     p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) erros.push(m.text()); });
@@ -28,6 +37,11 @@ const AXE = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
     await p.goto(SITE + '/' + c.pagina);
     await p.waitForSelector('#aviso-servidor', { timeout: 30000 });
     await p.waitForTimeout(500);
+    let textoAviso = '';
+    if (c.bancoFora) {
+      await p.click('#aviso-servidor .dica-admin summary');
+      textoAviso = await p.locator('#aviso-servidor').innerText();
+    }
     const info = await p.evaluate(() => {
       const a = document.getElementById('aviso-servidor');
       const cont = document.querySelector('.auth-container');
@@ -48,14 +62,15 @@ const AXE = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
       return r.violations.filter(v => v.impact === 'serious' || v.impact === 'critical')
         .map(v => v.id + ': ' + v.nodes.slice(0, 2).map(n => n.target.join(' ')).join(' | '));
     });
+    const avisoCerto = !c.bancoFora || (/banco de dados não está respondendo/.test(textoAviso) && /Resume project/.test(textoAviso));
     const ok = info.naColuna && info.antesDoCartao && info.mesmaLargura && info.semRolagemLateral &&
-      info.tema === c.tema && !graves.length && !erros.length;
+      info.tema === c.tema && !graves.length && !erros.length && avisoCerto;
     if (!ok) falhas++;
-    console.log((ok ? '✓ ' : '✗ ') + c.pagina + ' ' + c.largura + 'px ' + c.tema +
-      (ok ? '' : ' → ' + JSON.stringify({ info, graves, erros })));
+    console.log((ok ? '✓ ' : '✗ ') + c.pagina + (c.bancoFora ? ' (banco fora)' : '') + ' ' + c.largura + 'px ' + c.tema +
+      (ok ? '' : ' → ' + JSON.stringify({ info, graves, erros, textoAviso })));
     if (FOTOS && c.pagina === 'login.html' && (c.largura === 375 || c.tema === 'dark')) {
       fs.mkdirSync(FOTOS, { recursive: true });
-      await p.screenshot({ path: path.join(FOTOS, 'fora-do-ar-' + c.largura + '-' + c.tema + '.png') });
+      await p.screenshot({ path: path.join(FOTOS, 'fora-do-ar-' + (c.bancoFora ? 'banco-' : '') + c.largura + '-' + c.tema + '.png') });
     }
     await ctx.close();
   }

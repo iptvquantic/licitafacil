@@ -468,7 +468,11 @@ code, .mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
 .banner.info { background: var(--accent-soft); border-color: rgba(0,212,255,0.35); color: var(--text); }
 .banner .acoes { display: flex; gap: 8px; flex-wrap: wrap; }
 /* Aviso de sistema fora do ar (páginas de entrada) */
-.banner.aviso-servidor { justify-content: center; text-align: center; margin: 0; line-height: 1.5; }
+.banner.aviso-servidor { flex-direction: column; justify-content: center; gap: 6px; text-align: center; margin: 0; line-height: 1.5; }
+.dica-admin { font-size: 0.9rem; }
+.dica-admin summary { cursor: pointer; font-weight: 700; color: var(--accent); }
+.dica-admin p { margin-top: 6px; color: var(--text); text-align: left; }
+.dica-admin a { color: var(--accent); font-weight: 700; text-decoration: underline; }
 .banner.aviso-servidor.flutuante {
   position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
   width: calc(100% - 32px); max-width: 560px; z-index: 60; box-shadow: var(--shadow-lg);

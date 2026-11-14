@@ -5,6 +5,7 @@ var API_RESERVA = (window.location.hostname === 'localhost' || window.location.h
   : 'https://licitafacil-api-kxks.onrender.com';
 var API_URL = window.LF_API_URL || API_RESERVA;
 var _apiEscolhida = null;
+var _ultimaSonda = null; // última resposta do /api/health?sonda=1 (null = o servidor nem respondeu)
 
 // true quando a API responde, o banco está no ar e o login está configurado
 function testarAPI(base, limiteMs) {
@@ -14,8 +15,9 @@ function testarAPI(base, limiteMs) {
     .then(function (r) { return r.json().catch(function () { return null; }); })
     .then(function (j) {
       if (timer) clearTimeout(timer);
+      _ultimaSonda = j || null;
       return !!(j && j.db === 'ok' && !(j.config && j.config.jwt === false));
-    }, function () { if (timer) clearTimeout(timer); return false; });
+    }, function () { if (timer) clearTimeout(timer); _ultimaSonda = null; return false; });
 }
 
 function escolherAPI() {
@@ -111,15 +113,41 @@ function acordarServidor() {
   escolherAPI().then(function (base) { return fetch(base + '/api/health', { method: 'GET', cache: 'no-store' }); }).catch(function () { /* ignora */ });
 }
 
+// Banco fora do ar com a API no ar: quase sempre é o Supabase grátis que pausou o projeto por falta de uso
+function dicaAdministrador() {
+  var d = document.createElement('details');
+  d.className = 'dica-admin';
+  var s = document.createElement('summary');
+  s.textContent = 'Sou o administrador: como resolver';
+  var p = document.createElement('p');
+  p.appendChild(document.createTextNode('No plano grátis, o Supabase pausa o projeto depois de 7 dias sem uso. Entre em '));
+  var a = document.createElement('a');
+  a.href = 'https://supabase.com/dashboard';
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.textContent = 'supabase.com/dashboard';
+  p.appendChild(a);
+  p.appendChild(document.createTextNode(', abra o projeto do LicitaFácil e clique em Resume project. Em 2 a 5 minutos o sistema volta sozinho.'));
+  d.appendChild(s);
+  d.appendChild(p);
+  return d;
+}
+
 // Páginas de entrada: avisa com clareza quando o sistema está fora do ar (em vez de culpar a internet da pessoa)
 function avisarSeForaDoAr() {
   escolherAPI().then(function (base) { return testarAPI(base, 15000); }).then(function (ok) {
     if (ok || document.getElementById('aviso-servidor')) return;
+    var bancoFora = !!(_ultimaSonda && _ultimaSonda.db === 'erro');
     var aviso = document.createElement('div');
     aviso.id = 'aviso-servidor';
     aviso.className = 'banner alerta aviso-servidor';
     aviso.setAttribute('role', 'status');
-    aviso.textContent = 'O LicitaFácil está em manutenção no momento. Seus dados estão guardados e o acesso volta em breve.';
+    var texto = document.createElement('p');
+    texto.textContent = bancoFora
+      ? 'O LicitaFácil está fora do ar: o banco de dados não está respondendo. Seus dados estão guardados.'
+      : 'O LicitaFácil está em manutenção no momento. Seus dados estão guardados e o acesso volta em breve.';
+    aviso.appendChild(texto);
+    if (bancoFora) aviso.appendChild(dicaAdministrador());
     // Fica na coluna do formulário, entre a marca e o cartão; sem cartão, vira uma faixa fixa no topo
     var cartao = document.querySelector('.auth-card');
     if (cartao && cartao.parentNode) {
